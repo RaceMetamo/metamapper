@@ -1,0 +1,597 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>MetaMapper by Metamo Industries</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:#000;color:#ccc;font-family:Consolas,monospace;overflow:hidden;width:100vw;height:100vh;display:flex;flex-direction:column}
+#bar{background:#111;padding:5px 10px;display:flex;align-items:center;gap:6px;flex-shrink:0;flex-wrap:wrap}
+.t{font-size:11px;color:#88f;letter-spacing:1px}
+#bar button{background:#222;color:#aaa;border:1px solid #444;padding:3px 7px;font-size:10px;cursor:pointer;border-radius:2px}
+#bar button:hover{background:#333;color:#fff}
+#bar button.on{background:#339;color:#fff}
+#info{font-size:10px;color:#888;margin-left:auto}
+#wrap{flex:1;display:flex;overflow:hidden}
+#cw{flex:1;position:relative;background:#000}
+canvas{position:absolute;top:0;left:0;width:100%;height:100%}
+#pnl{width:260px;background:#111;border-left:1px solid #333;padding:8px;overflow-y:auto;font-size:10px}
+#pnl.hide{display:none}
+.sec{margin-bottom:6px;border:1px solid #333;padding:4px;border-radius:3px;cursor:pointer}
+.sec.act{border-color:#66a}
+.sh{font-size:9px;color:#66a;display:flex;justify-content:space-between;margin-bottom:2px}
+.sh button{font-size:9px;background:#333;color:#c66;border:1px solid #555;padding:0 4px;cursor:pointer}
+.rw{display:flex;align-items:center;justify-content:space-between;margin-bottom:3px}
+.rw label{color:#889;font-size:9px;min-width:48px}
+.rw select,.rw input[type=range]{background:#222;color:#bbb;border:1px solid #444;font-size:9px}
+.rw select{width:90px}
+.rw input[type=range]{width:72px}
+.mbx{margin-bottom:4px;padding:2px;background:#1a1a2a;border-radius:2px}
+#jbox{width:100%;height:50px;background:#1a1a2a;color:#8f8;border:1px solid #333;font-size:8px;font-family:inherit;resize:vertical;margin-top:4px}
+#help{display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.92);z-index:100;align-items:center;justify-content:center}
+#help-inner{max-width:700px;max-height:90vh;overflow-y:auto;padding:30px;color:#ccc;font-size:12px;line-height:1.7}
+#help-inner h2{color:#88f;font-size:16px;margin:18px 0 8px;letter-spacing:1px}
+#help-inner h3{color:#6af;font-size:13px;margin:12px 0 4px}
+#help-inner kbd{background:#333;border:1px solid #555;padding:1px 5px;border-radius:2px;font-size:11px;color:#fff}
+#help-inner .close{float:right;cursor:pointer;color:#888;font-size:20px}
+#help-inner .close:hover{color:#fff}
+#about{display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.94);z-index:100;align-items:center;justify-content:center}
+#about-inner{max-width:520px;padding:30px;color:#ccc;font-size:13px;line-height:1.8;text-align:center}
+#about-inner img{width:100px;margin-bottom:16px}
+#about-inner h1{color:#e83e8c;font-size:22px;letter-spacing:2px;margin-bottom:4px}
+#about-inner h2{color:#88f;font-size:15px;letter-spacing:1px;margin:16px 0 6px}
+#about-inner a{color:#4af;text-decoration:none}
+#about-inner a:hover{text-decoration:underline}
+#about-inner .close{cursor:pointer;color:#888;font-size:20px;position:absolute;top:12px;right:16px}
+#about-inner .close:hover{color:#fff}
+#logo-corner{position:absolute;bottom:8px;right:8px;opacity:0.3;pointer-events:none;z-index:5}
+#logo-corner img{width:40px;height:40px;border-radius:4px}
+.pal{display:flex;gap:3px;margin-bottom:4px}
+.pal input{width:28px;height:18px;padding:0;border:1px solid #555;cursor:pointer;background:none}
+.btn-sm{font-size:9px;background:#333;color:#aaa;border:1px solid #555;padding:0 4px;cursor:pointer;border-radius:2px}
+</style>
+</head>
+<body>
+<div id="bar">
+<span class="t">METAMAPPER</span>
+<button class="on" onclick="toggleMode(this)">EDIT</button>
+<button onclick="addReg()">+ Region</button>
+<button onclick="undoPt()">Undo Pt</button>
+<button onclick="closeShape()">Close</button>
+<button onclick="reopenShape()">Reopen</button>
+<button onclick="running=true">Play</button>
+<button onclick="running=false">Pause</button>
+<button onclick="document.getElementById('pnl').classList.toggle('hide')">Panel</button>
+<button onclick="doExport()">JSON</button>
+<button onclick="doImport()">Import</button>
+<button onclick="exportSVG()">SVG</button>
+<button onclick="exportOBJ()">OBJ</button>
+<button onclick="exportBlenderSetup()">Blender</button>
+<button onclick="document.getElementById('maskFile').click()">Mask</button>
+<button onclick="mOk=false;mImg=new Image();document.getElementById('info').textContent='Mask unloaded'">Unmask</button>
+<input type="file" id="maskFile" accept="image/*" style="display:none" onchange="loadMask(this)">
+<button onclick="setRes(0.5)">½×</button>
+<button onclick="setRes(1)">1×</button>
+<button onclick="document.fullscreenElement?document.exitFullscreen():document.documentElement.requestFullscreen()">Fullscr</button>
+<button onclick="toggleAudio(this)">🎤</button>
+<button onclick="startRec(this)" id="btnRec">⏺</button>
+<button onclick="var a=document.createElement('a');a.href=c.toDataURL('image/png');a.download='metamapper_still.png';a.click()">📷</button>
+<button onclick="savePreset()">Save</button>
+<button onclick="loadPreset()">Load</button>
+<button onclick="randomize()">🎲</button>
+<select id="autoRand" onchange="setAutoRand(this.value)" style="background:#222;color:#bbb;border:1px solid #444;font-size:10px;padding:2px">
+<option value="0">Auto: Off</option>
+<option value="2">2s</option>
+<option value="4">4s</option>
+<option value="8">8s</option>
+<option value="16">16s</option>
+<option value="32">32s</option>
+</select>
+<span id="info">Click canvas to place points</span>
+<button onclick="document.getElementById('help').style.display=document.getElementById('help').style.display==='none'?'flex':'none'">?</button>
+<button onclick="document.getElementById('about').style.display=document.getElementById('about').style.display==='none'?'flex':'none'">About</button>
+</div>
+<div id="wrap">
+<div id="cw"><canvas id="c" width="960" height="540"></canvas>
+<div id="logo-corner"><img src="data:image/jpeg;base64,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"></div></div>
+
+<div id="about"><div id="about-inner" style="position:relative">
+<span class="close" onclick="document.getElementById('about').style.display='none'">✕</span>
+<img src="data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAAAAAAD/4gHYSUNDX1BST0ZJTEUAAQEAAAHIAAAAAAQwAABtbnRyUkdCIFhZWiAH4AABAAEAAAAAAABhY3NwAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAQAA9tYAAQAAAADTLQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAlkZXNjAAAA8AAAACRyWFlaAAABFAAAABRnWFlaAAABKAAAABRiWFlaAAABPAAAABR3dHB0AAABUAAAABRyVFJDAAABZAAAAChnVFJDAAABZAAAAChiVFJDAAABZAAAAChjcHJ0AAABjAAAADxtbHVjAAAAAAAAAAEAAAAMZW5VUwAAAAgAAAAcAHMAUgBHAEJYWVogAAAAAAAAb6IAADj1AAADkFhZWiAAAAAAAABimQAAt4UAABjaWFlaIAAAAAAAACSgAAAPhAAAts9YWVogAAAAAAAA9tYAAQAAAADTLXBhcmEAAAAAAAQAAAACZmYAAPKnAAANWQAAE9AAAApbAAAAAAAAAABtbHVjAAAAAAAAAAEAAAAMZW5VUwAAACAAAAAcAEcAbwBvAGcAbABlACAASQBuAGMALgAgADIAMAAxADb/2wBDAAYEBQYFBAYGBQYHBwYIChAKCgkJChQODwwQFxQYGBcUFhYaHSUfGhsjHBYWICwgIyYnKSopGR8tMC0oMCUoKSj/2wBDAQcHBwoIChMKChMoGhYaKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCj/wAARCAB4AGEDASIAAhEBAxEB/8QAHAAAAwACAwEAAAAAAAAAAAAAAAYHAwUBAggE/8QASRAAAQIFAQMFDAcFBgcAAAAAAQIDAAQFBhESByExEyJBUWEUFTI1VXF2kZSx0dIWFzZWdKGyUlRic4EjNzhys8FCRJKVouHw/8QAGwEAAQUBAQAAAAAAAAAAAAAAAAECAwQFBgf/xAA6EQABAwIDAgcQAwEBAAAAAAABAAIRAwQFEiExQRMyM1FhgfAGFBUWIiNScXKRoaKxwtHSYsHhJZL/2gAMAwEAAhEDEQA/AGmxLFoFXs1ur1h+aZWFPF5wTHJttoQspBxjju4dMfGi27XmypdIpV6VGWBwH2Ep0K82U5xH022nuywbYpTpPcs/XlNPgbtSAonT5smNNeV21Sfrc03Lzb8pIy7imZeWl3C2hCEkpG5OMndFmjRDxJXT4RhDbtgcRJOup0AmN2pJM7wABvWy+iFI+7F+epHywfRCkfdi/PUj5YT+/VU8qT/tK/jB36qnlSf9pX8Yn71b2lbfizT9FvzflOH0QpH3Yvz1I+WD6IUj7sX56kfLCf36qnlSf9pX8YO/VU8qT/tK/jB3q3tKPFmn6Lfm/KcPohSPuxfnqR8sH0QpH3Yvz1I+WE/v1VPKk/7Sv4wd+qp5Un/aV/GDvVvaUeLNP0W/N+U4fRCkfdi/PUj5YPohSPuxfnqR8sJ/fqqeVJ/2lfxg79VTypP+0r+MHere0o8Wafot+b8pvXatCZSVzNu320ynepZSjmjr8GN7I7P7PqdBfqNJm6jMNBteFmYwptwJJCVp07juieU6565T5pExK1WdDiDkBbylpPYUk4IinScyg1+rvSjYYYq9uCousp3JDuOIHr9cQ1aAaJCy8TwRltTJAgxIIJ3RIIPQZBB3QQvO3fB/9pP/AEwRj0iCKq5CVb7N+zdj+kS/fCFWPG8/+Jd/WYfbN+zdj+kS/fCHWPG8/wDiXf1mNC14vbnK9E7meSHs/c5UzZZs6kK3RxVq2XXGnVKSywhZQMA4KlEb+IO7sh5+qy0/3B32lz4xE6JfNw0WntyNNqHJSrZJQgtIVpycneRnjH3fWddvlQezt/LA+lVc4kOTLzDMXrV3Pp1oaToMzhpu0AVe+qy0/wBwd9pc+MSfa3bVPtquSjNKS42w+xyhQpZXpUFEbid++MP1nXb5UHs7fyxobhuCp3DMtTFXme6HWkcmg6EpwM54ADphaVOo10uMhT4Zh2JW9wH3NbM3XTMT9QstlUtitXVTKfNlYl33dK9BwSACcA/0i7jZZafk932lz4xE9mrnI3vSncZ5Na1468NrMbBzaldbq1OIqDbSVbwhMujCR1DIJharKjneQYS4ta391chtpUygNE6kaknm9Srn1WWn+4O+0ufGNLduyijmjTL1ES7KzjKC4gF1S0OYGdJCs4z1iJ39Z12+VB7O38sdH9pN1vsuNOVTmLSUqww2Dg7uOIjFKsDOZUqWFYzTeHcPMc7nH4Qk8HIB64rlK8YS/obEjG4YEVyleMJf0NiW44vvWnj3I9TvovP0EEEZi8vVts37N2P6RL98IdY8bz/4l39Zh8s37N2P6RL98IdY8cT/AOJd/WY0LXi9ucr0XuZ5Iez9zk/UGzreRYDdyXDM1AJWojRKlIxzygAAjeSRxzHS36VYFbq0vTpZy4Gn3yUtl4oCScE4yAeqNrMp1bAJFP7T6R65gx8NGp9AlL3t5VuuT6y3UHJaY7qx4SUEgpwOHGCSQ4knemivUe2u51R+YOeBGwZRIlJl60ZugXPP0xhxbrLChoUvwiCkKGcdO+HbZfs9plzUF6oVN+aCuXU0hDKwkAJA3nccnfC9tc/vCq/+Zv8A00xU9g32Ic/GO+5MLVe4Ug4HXRSYneV6eFU6zHEOIbJ9Y1X1U/ZzQ7d7pqEkJl2ZbYcDZfd1BGUkEgADfjdHnNhBcLSBgFWlIz27ost07W1sT1TpsrSkLbbU5Lh1x4gkjKSdIHX0ZiOyYxMy46loH5iFoB4BL1LgVK8Y2pVvJJdESZ0E+7aqfc9qWZaa5SVrMzWn5t1vWe5tGMA4zgjcCc4GTHagWfaF0UupO0OZrDUxKIyRMlG4kEg4A3jcemNltal6ZMXxJGuKmU09mmLec7mxrOHCABntMZdlUvJys3eDVMU8qS5FlbJe8PSptShnt3xHmPB5pM/6sw3VUWAuBUfwkA/x4wEfHYokk5SD1iK7SvGEv6GxIkeAnzCK7SvGEv6GxLccU9a18e5Hqd9F5+gggjMXl6ttm/Zux/SJfvhDrHjif/Eu/rMPlm/Zux/SJfvhDrHjif8AxLv6zGha8Xtzlei9zPJD2fucrBTZeRmdhkoiqT5kGArUHw2XNKg+SnmjecmFy3HLZpdelqjNXYqZSzMKmi0inOI1OKGMk790bKd/w+yf84f65iSQ6mzNm13lPw+z75bcAvIBe8QMv9gn4ql3mLNuKvP1Ru5npRb4TyjZkXHBkDGQd2NwG6Gqybts21qEinMVl6YOtTi3VSridSj1DG4bhEKjYUqi1OrJcNLkJmbDZAWWUFWnPDMOdRBblJMKzcYPSfbijWrO4NsbS0bNBrlTbXKfZtRq85OMXU9LomHVO8mqnuL0lRyRnduyY+Rii2i2+2tV4OKCVBRApjgzg5640c/bdap8quZn6VOy8ujGpx1opSMnA3xqYcG6aO+n4VqjbZmRTuHEDTTIfjlVbv6rWtdM+1NM3KuSWmXVLOJVIuOBaCrV2YOY3uy6VpbNOuB2m1rvo8tpCHT3Opnk0pQoI3Hjuzv7IhCQVKCUglROAAMkmLTsbotSpVNuFypyL8ol9lHJ8snSVYSvOBx6RENVgZTgFY2K2LLKwNNtUwIgHLr5Q6AenaoojwE+YRXaV4wl/Q2JEjwE+YRXaV4wl/Q2H3HFPWr2Pcj1O+i8/QQQRmLy9W2zfs3Y/pEv3wh1jxxP/iXf1mHyzfs3Y/pEv3wh1jxvP/iXf1mNC14vbnK9F7meSHs/c5U+d/w+yf8AOH+uYn1l0tms3TTadMhwsTDulfJnCtOkkkH+kU+xGqfeGzQW0ud7lnJdzKgMFWOUKwoJPEHOI3BctDZjKlKBy1TUneBhyYc8/QhPqHnhBUy5mAaklQMxA2vD2rGk1XPcQANx2Gfip9eezCqUMOTVOJqMgkaiUpw62P4k9I7R6hCVSqlOUqcRN02adlphPBbasZHUegjsO6Ge8dodYuQrZ5TuKnn/AJdlR5w/jVxV5tw7IX6BQ6jX50SlJllPu4yrG5KB1qJ3AROzMG+cW7Zd8Mtj4RLen1dO73aLLcVyVW4X0u1acW9p8Bsc1CPMkbs9vGNlZ1jVe6FByVbDEjnCpp7cndxCRxUfNu7YwXZZ1YthaTUmEql1HCJhk6m1HqzxB7CIx2tdlXtp/XTJkhknK5dznNr846D2jBg2s82nOJfaf80t6Ob4b+xV/s6wqPbKUusNd0z2N808AVD/ACjgkebf2wx1LxfNfyl+4wmWZtMpNf5OXmyKfUDu5J1XMWf4FdPmOD54YbxrclRKBOTM88hH9mpLaCec4oggJSOkxnOD80O2rza6o3jroNuQS8nfv9XR6tF5QR4CfMIrtK8YS/obEiSMJA6hFdpXjCX9DYvXHFPWu8x7kep30Xn6CCCMxeXq2WgQi17JcWcITcS8qPAb4SrklXpO4anLzCCh1uZcyk9qiQfMQQYrOzGgy1x7JVyE2tTQM48428nwmlhW5Q83ujrOUa4ampLU7SrZuNxhIQJ0vlDqk9GrBEW7eoGhdngWJMt6YBjQQZMb5BBOm8giQdii4yCCMgjgRxgOSSTkk8SemKw1bE886ptmzrXW4nOUpqCyRjs1Ri7wTH3UtP8A7kr54tcM3tC6PwzRnZ8zP2UrxHZClozoUpOf2SRFVVbk2ltC1WjaoQvOlRqKsKxxwdUdU2/MrUEptO1ConAAqSiT/wCcHDN7QjwzRO75mfspapbihha1qHUpRMdMRWH7ZnZdeh+z7XaXjOF1BSTj+qoyC1KiWOXFl2yWcauU7uXpx151YhOGb2hN8NUANg/9M/ZSPHZHKipRBUVKI4EnMVpi1qhMIUtizLYcQncVIn1qA9So4lrXn5kqEvZ1sOlPHk59asepUHDN7Ql8N0OjT+TP2Ul/oYsMpLuS1aMu8kpelrQ5N1PShXUe2MUlTp+nTqVylu2fKTiDzXHJ7WWz16So7xDfJ20uk23cNSqU4moVioSzin5lIwnAQcJR/CP/ALhENeqC1Y2M4myrTjTYQNQSSY5pAAHTJ00Xk+CCCKS4NentjX91cz/Nmv8AeJts1olcqaZ2ZtaeblZhpKGHcr06kOA78gHhp8/SIpGxtzkNlswszLcppcmF8u4nUloajziOkDB3dkaa2LyqTtPuV4VSnl6Rl3Fy7LUolBe08Hdx4Dq/iixQJDHQunwarWp21YUWgzl2zHuggzPOI2rVbIJUSO0WpShWla5eXmGisDGopWkZ/KEWjiTLsx3SulpGOb3alwjOTw5P/eKlbl5V6YuC2GZ2Vk5dqo6lLfbaTmZQc7+tJBGCPNGjlr5qhkG5vuqlPTZnAx3v7gTrUjjryN+M7osguk6c2/1romVbnhqji0S4NGjuYuG0NO0g+renlFu2tW9nrMxKyrL7MlLPqZU2pxKUO4JWQFHONaemE7YdbtJriqjM1KVQ+9JuMLZUFFOg849B370jjG5ql+T1LmbxkVzEnLLk1BNOZUylOrK+du/4ubvj467e1apPe0y79OlW3pBh95DbTfLFxScklBI3dQHRETQ/KWjf09azKNO94CpQaT5wgtJcdBo47tZmDEaylNAnLvueuTjlLXVXtDnMbfDfc4zpQrJ4hOOHT0xuLEqzz+ze8KW4pK5aWlS61v8AA151DzZGf6mGKvXDWqdT7eqVMnZdtmsFtotuU9CFpVgalHfvySTj845uir3FR7kl6DTHJeaeckeVcLMi2C8sFZzpKsAYAzvPTx4Q4uLhEdgrL7h9dgpBjQNC3yj5PBnytrY6NI60oWHbNeqtDnHqFUW5aRmXFSs6gqI5qQFZwBv3Ejdg8RwMZdloc7xXqJPVy3e7m8l4WefwxDBNX7PN2BIVORn5KVqPKuMvSvcqcTCgRlSd+7CSM9eeiOK5eVSpMlby6ZUqe4J9pxb8y3KtoSVBQGnecDTkjeeiFJe6RG3+k+pWu64fTcxozugbRGQyZOXXQQD/AKkSkG2hZdZFRDff/WO48hWcc3q5v7XGKfs1Do2Q1TldenEzyerONOno7M5/ONPXrlnmKNRpxiaob7syHVzDqmWeUyFAaUgnBxwJB3mHKgVlyvbMp2aeWtbqmX2ipTIayQDjCQSMbwMxHXcSwnpVLGa9WraFxbo5/pEwRIgDKIGi8mwR01p64IqLilbbC2k0+27Zl6bMyE87MNOOqK2uTKFJWsqAIKgemGBO2qkpzpt6bGRg4W0Mj1wQQikDjsXI220sFJFvznN8HntbvNvjhO2ulJVqTb02FdYW0D74IIEZkObaqS4sKct6bUocCpbRPvgXtrpS1ZXb04o9ZW0f94IIEZiuytt1MXjXQJ1WneMuNHH5wHbfTSvWaBO68Y1co1n3wQQJJXQ7aqSUhJt6bwN+NbXxjk7aqSUgG3psgcBra3fnBBAlzFcHbVSSADb02QOA1tfGMU9tipU1JPtGk1JKlNLQ2lPJaEkpIBPP38f/AFBBAjMV5/72u/tI9cEEECav/9k=" alt="Metamo Industries">
+<h1>METAMAPPER</h1>
+<p style="color:#888;font-size:11px;margin-bottom:16px">by Metamo Industries</p>
+
+<h2>ABOUT</h2>
+<p>MetaMapper is a browser-based polygon editor and generative animation tool for projection mapping, developed by Metamo Industries — a Singapore-based immersive media studio specialising in projection mapping, interactive installations, XR, and real-time engine work.</p>
+
+<p>Founded in Singapore, Metamo Industries has delivered immersive experiences for cultural institutions, festivals, and brands across Asia and beyond. Our work spans large-scale architectural projection mapping, interactive body-tracking installations, generative art systems, and transmedia storytelling.</p>
+
+<h2>THE BRIDGE GALLERY</h2>
+<p>MetaMapper was created as part of The Bridge Gallery (TBG) — a permanent projection mapping installation and creative exhibition space at 23 Haji Lane, Singapore. TBG serves as both a living canvas for projection art in the heart of Kampong Glam and a platform for opening up access to projection mapping tools and workflows to a wider creative community.</p>
+
+<h2>CONNECT</h2>
+<p>
+<a href="https://metamoind.com" target="_blank">metamoind.com</a><br>
+<a href="https://www.instagram.com/metamo_industries" target="_blank">@metamo_industries</a><br>
+<a href="https://www.instagram.com/thebridgegallery.sg" target="_blank">@thebridgegallery.sg</a>
+</p>
+
+<p style="color:#555;margin-top:20px;font-size:10px">© Metamo Industries Pte. Ltd.</p>
+</div></div>
+<div id="pnl"><div id="rc"></div><textarea id="jbox" style="display:none"></textarea></div>
+</div>
+
+<div id="help"><div id="help-inner">
+<span class="close" onclick="document.getElementById('help').style.display='none'">✕</span>
+<h2>METAMAPPER — HELP</h2>
+<p>A browser-based polygon editor and generative animation tool for projection mapping by Metamo Industries. Trace regions over a mask reference image, assign animated fill and edge effects per region, modulate parameters with LFOs or live audio, and record the output.</p>
+
+<h2>WORKFLOW</h2>
+<p>1. Click <kbd>Mask</kbd> to load your projection mask template as a reference background.<br>
+2. Click on the canvas to place polygon vertices over the mask. Each click adds a point.<br>
+3. Click <kbd>Close</kbd> when your shape has 3+ points to complete the region.<br>
+4. Click <kbd>+ Region</kbd> to start tracing the next panel. Repeat for all surfaces.<br>
+5. Click <kbd>EDIT</kbd> to toggle to <kbd>ANIMATE</kbd> mode and see your effects live.<br>
+6. Click <kbd>Unmask</kbd> to drop the reference image for better performance.<br>
+7. Use <kbd>⏺</kbd> to record MP4 or <kbd>📷</kbd> for PNG stills.</p>
+
+<h2>TOOLBAR</h2>
+<h3>Editing</h3>
+<p><kbd>EDIT / ANIMATE</kbd> Toggle between editing polygons and viewing live effects.<br>
+<kbd>+ Region</kbd> Add a new polygon region.<br>
+<kbd>Undo Pt</kbd> Remove the last placed vertex (before closing).<br>
+<kbd>Close</kbd> Close the current polygon (needs 3+ points).<br>
+<kbd>Reopen</kbd> Reopen a closed shape for editing.</p>
+
+<h3>Playback</h3>
+<p><kbd>Play</kbd> / <kbd>Pause</kbd> Start or stop the animation clock.<br>
+<kbd>Fullscr</kbd> Fullscreen mode for capture or performance.</p>
+
+<h3>I/O</h3>
+<p><kbd>JSON</kbd> Export all regions, effects, and settings as JSON text.<br>
+<kbd>Import</kbd> Paste JSON into the text area and click to load.<br>
+<kbd>SVG</kbd> Download regions as an SVG file.<br>
+<kbd>OBJ</kbd> Download regions as a 3D OBJ mesh (flat, with canvas bounds quad).<br>
+<kbd>Blender</kbd> Download a Python script that sets up an orthographic camera in Blender matching your canvas.<br>
+<kbd>Mask</kbd> Load a reference mask image (PNG). Canvas stays at current resolution.<br>
+<kbd>Unmask</kbd> Unload the mask image to improve performance.</p>
+
+<h3>Resolution</h3>
+<p><kbd>½×</kbd> Half resolution — fast editing and performance.<br>
+<kbd>1×</kbd> Full mask resolution — for final recording.</p>
+
+<h3>Audio &amp; Recording</h3>
+<p><kbd>🎤</kbd> Enable microphone input for audio-reactive effects.<br>
+<kbd>⏺</kbd> Start/stop MP4 video recording of the canvas.<br>
+<kbd>📷</kbd> Save a PNG screenshot of the current frame.</p>
+
+<h3>Presets &amp; Randomize</h3>
+<p><kbd>Save</kbd> Save current state to browser localStorage.<br>
+<kbd>Load</kbd> Load a previously saved preset.<br>
+<kbd>🎲</kbd> Randomize all region fill/edge types, hues, speeds, and blend modes.<br>
+<kbd>Auto</kbd> dropdown — auto-randomize at set intervals (2s–32s).</p>
+
+<h2>SIDE PANEL — GLOBAL</h2>
+<p><b>Speed</b> — Global animation speed multiplier.<br>
+<b>Bright</b> — Global brightness multiplier.<br>
+<b>Mask</b> — Reference mask opacity (edit mode) or faint overlay (animate mode).<br>
+<b>Blackout</b> — Master fade to black.<br>
+<b>Palette</b> — Four color pickers for the global color palette.</p>
+
+<h2>POST FX</h2>
+<p><b>Trails</b> — Motion echo/ghosting. Higher values = longer trails. Great with edge particles.<br>
+<b>Bloom</b> — Gaussian glow applied additively. Simulates light bleed.<br>
+<b>Vignette</b> — Radial edge darkening.<br>
+<b>Chrom Ab</b> — Chromatic aberration (RGB channel offset).<br>
+Each post-FX parameter has its own LFO/Audio modulation under "▸ POST FX LFO".</p>
+
+<h2>SIDE PANEL — PER REGION</h2>
+<p><kbd>▲</kbd> <kbd>▼</kbd> Reorder layers (later = on top).<br>
+<kbd>Dup</kbd> Duplicate the region with all settings.<br>
+<kbd>M</kbd> Mute — hide this region.<br>
+<kbd>S</kbd> Solo — show only soloed regions.</p>
+
+<h3>Fill Effects</h3>
+<p>Noise, Scan Lines, Pulse, Breathe, Rain, Static, Plasma, Gradient, Grid, Ripple, Stripes, or Off.</p>
+
+<h3>Edge Effects</h3>
+<p>Pulse (chasing light trails), Flow (orbiting particles), Strobe (flashing outline), Maze (segmented dashes), Glow (bloom outline), Dashes (animated dash pattern), or Off.</p>
+
+<h3>Common Controls</h3>
+<p><b>Blend</b> — Compositing mode: Normal, Add, Multiply, Screen, Overlay, Difference.<br>
+<b>Opacity</b> — Region transparency.<br>
+<b>Scale</b> — Effect pattern zoom (noise density, grid spacing, stripe width, etc).<br>
+<b>Angle</b> — Rotates applicable effects (scan, pulse, grid, stripes, gradient).<br>
+<b>Phase</b> — Time offset so identical effects on different regions aren't synchronized.</p>
+
+<h3>LFO / Audio Modulation</h3>
+<p>Each parameter can be modulated by a waveform: Sine, Triangle, Sawtooth, Square, Noise, or live audio bands (Bass, Mid, High). Set <b>Rate</b> for speed and <b>Depth</b> for modulation amount. The LFO oscillates around the base slider value.</p>
+
+<h2>VERTEX EDITING</h2>
+<p>In Edit mode, click and drag existing vertices to reposition them. Cyan = dragging, Yellow = last placed point. Vertex indices are shown for reference. Use <kbd>Reopen</kbd> on closed shapes to add or remove points.</p>
+
+<h2>SHARING</h2>
+<p>This is a single self-contained HTML file. Share it with the mask PNG and a JSON export of your regions/settings. The recipient opens the HTML in Chrome, loads the mask, and clicks Import to restore your setup.</p>
+
+<p style="color:#555;margin-top:20px;font-size:10px">MetaMapper by Metamo Industries — <a href="#" onclick="document.getElementById('help').style.display='none';document.getElementById('about').style.display='flex'" style="color:#555">About</a></p>
+</div></div>
+
+<script>
+var W=960,H=540,c=document.getElementById("c"),ctx=c.getContext("2d");
+var mode="edit",running=false,time=0,gSpeed=1,gBright=1,maskA=0.4,blackout=0,lightAngle=45;
+var trails=0,bloom=0,vignette=0,chromab=0;
+var fps=0,frameCount=0,lastFpsTime=0;
+var gMods={trails:{wave:"off",rate:0.2,depth:0.3},bloom:{wave:"off",rate:0.3,depth:0.4},vignette:{wave:"off",rate:0.1,depth:0.3},chromab:{wave:"off",rate:0.5,depth:0.3},blackout:{wave:"off",rate:0.1,depth:0.5}};
+var active=0;
+var COLS=["#4466ff","#44dddd","#ff4444","#dd44dd","#44ff44","#ffaa22","#ff66aa","#aaaaff"];
+var palette=["#4488ff","#ff4488","#44ffaa","#ffaa22"];
+
+// Fill & Edge types
+var FT=["noise","scan","pulse","breath","rain","static","plasma","gradient","grid","ripple","stripes","off"];
+var FL={noise:"Noise",scan:"Scan",pulse:"Pulse",breath:"Breathe",rain:"Rain","static":"Static",plasma:"Plasma",gradient:"Gradient",grid:"Grid",ripple:"Ripple",stripes:"Stripes",off:"Off"};
+var ET=["pulse","flow","strobe","maze","glow","dashes","off"];
+var ELB={pulse:"Pulse",flow:"Flow",strobe:"Strobe",maze:"Maze",glow:"Glow",dashes:"Dashes",off:"Off"};
+var BLENDS=["source-over","lighter","multiply","screen","overlay","difference"];
+var BLBL={"source-over":"Normal",lighter:"Add",multiply:"Multiply",screen:"Screen",overlay:"Overlay",difference:"Difference"};
+
+// Audio
+var audioCtx=null,analyser=null,audioData=null,audioOn=false,audioBands={lo:0,mid:0,hi:0};
+function toggleAudio(btn){
+  if(!audioOn){
+    audioCtx=new(window.AudioContext||window.webkitAudioContext)();
+    analyser=audioCtx.createAnalyser();analyser.fftSize=256;
+    audioData=new Uint8Array(analyser.frequencyBinCount);
+    navigator.mediaDevices.getUserMedia({audio:true}).then(function(s){
+      audioCtx.createMediaStreamSource(s).connect(analyser);
+      audioOn=true;btn.classList.add("on");
+    }).catch(function(){alert("Mic denied")});
+  }else{audioOn=false;btn.classList.remove("on");audioBands={lo:0,mid:0,hi:0}}
+}
+function updateAudio(){
+  if(!audioOn||!analyser)return;
+  analyser.getByteFrequencyData(audioData);
+  var n=audioData.length,lo=0,mid=0,hi=0,t=Math.floor(n/3);
+  for(var i=0;i<t;i++)lo+=audioData[i];
+  for(var i=t;i<t*2;i++)mid+=audioData[i];
+  for(var i=t*2;i<n;i++)hi+=audioData[i];
+  audioBands.lo=(lo/t)/255;audioBands.mid=(mid/t)/255;audioBands.hi=(hi/(n-t*2))/255;
+}
+
+// Recording
+var recorder=null,recChunks=[];
+function startRec(btn){
+  if(recorder&&recorder.state==="recording"){recorder.stop();btn.textContent="⏺";btn.classList.remove("on");return}
+  recChunks=[];var stream=c.captureStream(30);
+  var mime="video/mp4";
+  if(!MediaRecorder.isTypeSupported(mime))mime="video/webm;codecs=vp9";
+  recorder=new MediaRecorder(stream,{mimeType:mime});
+  var ext=mime.indexOf("mp4")>=0?"mp4":"webm";
+  recorder.ondataavailable=function(e){if(e.data.size>0)recChunks.push(e.data)};
+  recorder.onstop=function(){var blob=new Blob(recChunks,{type:mime});var a=document.createElement("a");a.href=URL.createObjectURL(blob);a.download="metamapper_rec."+ext;document.body.appendChild(a);a.click();document.body.removeChild(a)};
+  recorder.start();btn.textContent="⏹";btn.classList.add("on");
+}
+
+// Presets
+function savePreset(){var name=prompt("Name:","preset1");if(!name)return;localStorage.setItem("mm_"+name,JSON.stringify({regions:regs,globals:{gSpeed:gSpeed,gBright:gBright,blackout:blackout,trails:trails,bloom:bloom,vignette:vignette,chromab:chromab,palette:palette,gMods:gMods}}));document.getElementById("info").textContent="Saved: "+name}
+function loadPreset(){var keys=[];for(var i=0;i<localStorage.length;i++){var k=localStorage.key(i);if(k.indexOf("mm_")===0)keys.push(k.slice(4))}if(!keys.length){alert("No presets");return}var name=prompt("Load:\n"+keys.join(", "));if(!name)return;try{var d=JSON.parse(localStorage.getItem("mm_"+name));regs=[];for(var i=0;i<d.regions.length;i++){var nr=mkReg(d.regions[i].label);for(var k in d.regions[i])nr[k]=d.regions[i][k];nr.color=COLS[i%COLS.length];regs.push(nr)}if(d.globals){gSpeed=d.globals.gSpeed||1;gBright=d.globals.gBright||1;blackout=d.globals.blackout||0;trails=d.globals.trails||0;bloom=d.globals.bloom||0;vignette=d.globals.vignette||0;chromab=d.globals.chromab||0;if(d.globals.palette)palette=d.globals.palette;if(d.globals.gMods)gMods=d.globals.gMods}active=0;buildP()}catch(e){alert("Error: "+e.message)}}
+
+// Mask
+var mImg=new Image(),mOk=false,maskW=960,maskH=540;
+function loadMask(input){if(!input.files||!input.files[0])return;var reader=new FileReader();reader.onload=function(e){mImg=new Image();mImg.onload=function(){mOk=true;maskW=mImg.naturalWidth;maskH=mImg.naturalHeight;document.getElementById("info").textContent="Mask: "+maskW+"x"+maskH+" (render: "+W+"x"+H+")"};mImg.src=e.target.result};reader.readAsDataURL(input.files[0])}
+function setRes(scale){W=Math.round(maskW*scale);H=Math.round(maskH*scale);c.width=W;c.height=H;document.getElementById("info").textContent="Render: "+W+"x"+H}
+
+// Noise
+var NS=256,nT=new Float32Array(NS*NS);
+for(var i=0;i<nT.length;i++)nT[i]=Math.random();
+function n2(x,y){var ix=((x|0)%NS+NS)%NS,iy=((y|0)%NS+NS)%NS,fx=x-(x|0),fy=y-(y|0);var a=nT[iy*NS+ix],b=nT[iy*NS+(ix+1)%NS],cc=nT[((iy+1)%NS)*NS+ix],d=nT[((iy+1)%NS)*NS+(ix+1)%NS];var sx=fx*fx*(3-2*fx),sy=fy*fy*(3-2*fy);return a*(1-sx)*(1-sy)+b*sx*(1-sy)+cc*(1-sx)*sy+d*sx*sy}
+function hs(h,s,l){return"hsl("+((h%360+360)%360)+","+Math.round(s*100)+"%,"+Math.round(Math.max(0,Math.min(1,l))*100)+"%)"}
+function palCol(idx,l){var c=palette[idx%palette.length];var r=parseInt(c.slice(1,3),16),g=parseInt(c.slice(3,5),16),b=parseInt(c.slice(5,7),16);return"rgba("+Math.round(r*l)+","+Math.round(g*l)+","+Math.round(b*l)+",1)"}
+
+// Region
+function mkReg(lbl){var i=regs.length;return{label:lbl||"Region "+(i+1),color:COLS[i%COLS.length],poly:[],closed:false,
+  fill:"noise",fillHue:200+i*30,fillSpeed:1,fillInt:0.6,
+  edge:"pulse",edgeHue:180+i*25,edgeSpeed:1.5,edgeWidth:3,edgeInt:0.9,
+  blend:"source-over",opacity:1,scale:1,angle:0,phase:0,contrast:1,mute:false,solo:false,
+  mods:{fillHue:{wave:"off",rate:0.5,depth:60},fillInt:{wave:"off",rate:0.3,depth:0.3},fillSpeed:{wave:"off",rate:0.2,depth:0.5},edgeHue:{wave:"off",rate:0.4,depth:40},edgeInt:{wave:"off",rate:0.5,depth:0.4},edgeSpeed:{wave:"off",rate:0.3,depth:1},edgeWidth:{wave:"off",rate:0.2,depth:2},scale:{wave:"off",rate:0.2,depth:0.5},angle:{wave:"off",rate:0.1,depth:45},opacity:{wave:"off",rate:0.3,depth:0.3}}}}
+
+var regs=[];
+
+// LFO
+var WAVES=["off","sin","tri","saw","sq","noise","audio_lo","audio_mid","audio_hi"];
+var WLBL={off:"Off",sin:"Sine",tri:"Tri",saw:"Saw",sq:"Square",noise:"Noise",audio_lo:"Bass",audio_mid:"Mid",audio_hi:"High"};
+var MOD_PARAMS=["fillHue","fillInt","fillSpeed","edgeHue","edgeInt","edgeSpeed","edgeWidth","scale","angle","opacity"];
+var MOD_LABELS={fillHue:"F.Hue",fillInt:"F.Int",fillSpeed:"F.Spd",edgeHue:"E.Hue",edgeInt:"E.Int",edgeSpeed:"E.Spd",edgeWidth:"E.W",scale:"Scale",angle:"Angle",opacity:"Opac"};
+
+function lfo(wave,phase){
+  if(wave==="sin")return Math.sin(phase*Math.PI*2);
+  if(wave==="tri")return Math.abs((phase%1)*4-2)-1;
+  if(wave==="saw")return(phase%1)*2-1;
+  if(wave==="sq")return(phase%1)<0.5?1:-1;
+  if(wave==="noise")return n2(phase*10,phase*7.3)*2-1;
+  if(wave==="audio_lo")return audioBands.lo*2-1;
+  if(wave==="audio_mid")return audioBands.mid*2-1;
+  if(wave==="audio_hi")return audioBands.hi*2-1;
+  return 0;
+}
+
+function applyMods(r,t){
+  var out={};for(var k in r)out[k]=r[k];out.mods=r.mods;
+  var pt=t+r.phase;
+  for(var p=0;p<MOD_PARAMS.length;p++){
+    var param=MOD_PARAMS[p];var m=r.mods[param];
+    if(m&&m.wave!=="off")out[param]=r[param]+lfo(m.wave,pt*m.rate)*m.depth;
+  }
+  out.fillInt=Math.max(0,out.fillInt);out.fillSpeed=Math.max(0.01,out.fillSpeed);
+  out.edgeInt=Math.max(0,out.edgeInt);out.edgeSpeed=Math.max(0.01,out.edgeSpeed);
+  out.edgeWidth=Math.max(0.5,out.edgeWidth);out.opacity=Math.max(0,Math.min(1,out.opacity));
+  out.scale=Math.max(0.1,out.scale);
+  return out;
+}
+
+// Actions
+function toggleMode(btn){mode=mode==="edit"?"animate":"edit";btn.textContent=mode==="edit"?"EDIT":"ANIMATE";btn.classList.toggle("on",mode==="edit");running=mode==="animate";c.style.cursor=mode==="edit"?"crosshair":"default";document.getElementById("info").textContent=mode==="edit"?"Click to place points":"Animating..."}
+function addReg(){regs.push(mkReg());active=regs.length-1;buildP()}
+function undoPt(){var r=regs[active];if(r&&r.poly.length>0&&!r.closed){r.poly.pop();buildP()}}
+function closeShape(){var r=regs[active];if(r&&r.poly.length>=3){r.closed=true;buildP()}}
+function reopenShape(){var r=regs[active];if(r&&r.closed){r.closed=false;buildP()}}
+function selReg(i){active=i;buildP()}
+function delReg(i){regs.splice(i,1);if(active>=regs.length)active=Math.max(0,regs.length-1);buildP()}
+function dupReg(i){var r=regs[i];var nr=mkReg(r.label+" copy");for(var k in r){if(k!=="label"&&k!=="color")nr[k]=typeof r[k]==="object"?JSON.parse(JSON.stringify(r[k])):r[k]}nr.color=COLS[regs.length%COLS.length];regs.push(nr);active=regs.length-1;buildP()}
+function moveUp(i){if(i<=0)return;var t=regs[i];regs[i]=regs[i-1];regs[i-1]=t;if(active===i)active=i-1;else if(active===i-1)active=i;buildP()}
+function moveDown(i){if(i>=regs.length-1)return;var t=regs[i];regs[i]=regs[i+1];regs[i+1]=t;if(active===i)active=i+1;else if(active===i+1)active=i;buildP()}
+function setFill(i,v){regs[i].fill=v}
+function setEdge(i,v){regs[i].edge=v}
+
+// Randomize
+var autoRandTimer=null;
+function randomize(){
+  var fills=FT.filter(function(f){return f!=="off"});
+  var edges=ET.filter(function(e){return e!=="off"});
+  for(var i=0;i<regs.length;i++){
+    var r=regs[i];
+    r.fill=fills[Math.floor(Math.random()*fills.length)];
+    r.edge=edges[Math.floor(Math.random()*edges.length)];
+    r.fillHue=Math.floor(Math.random()*360);
+    r.edgeHue=Math.floor(Math.random()*360);
+    r.fillSpeed=0.3+Math.random()*2.5;
+    r.edgeSpeed=0.3+Math.random()*3;
+    r.scale=0.3+Math.random()*2;
+    r.angle=Math.floor(Math.random()*360);
+    r.blend=BLENDS[Math.floor(Math.random()*BLENDS.length)];
+  }
+  buildP();
+}
+function setAutoRand(sec){
+  if(autoRandTimer){clearInterval(autoRandTimer);autoRandTimer=null}
+  var s=parseFloat(sec);
+  if(s>0)autoRandTimer=setInterval(randomize,s*1000);
+}
+
+// Canvas interaction
+c.style.cursor="crosshair";
+var dragIdx=-1,isDragging=false;
+function canvasXY(e){var rect=c.getBoundingClientRect();return[+(((e.clientX-rect.left)/rect.width)).toFixed(4),+(((e.clientY-rect.top)/rect.height)).toFixed(4)]}
+function nearVtx(poly,nx,ny,th){for(var i=0;i<poly.length;i++){var dx=(poly[i][0]-nx)*W,dy=(poly[i][1]-ny)*H;if(Math.sqrt(dx*dx+dy*dy)<th)return i}return-1}
+c.onmousedown=function(e){if(mode!=="edit"||e.button!==0)return;if(!regs.length)addReg();var r=regs[active];if(!r)return;var p=canvasXY(e);var vi=nearVtx(r.poly,p[0],p[1],12);if(vi>=0){dragIdx=vi;isDragging=true;return}if(!r.closed){r.poly.push(p);document.getElementById("info").textContent=r.label+": "+r.poly.length+" pts";buildP()}};
+c.onmousemove=function(e){if(!isDragging||dragIdx<0)return;var r=regs[active];if(r)r.poly[dragIdx]=canvasXY(e)};
+c.onmouseup=function(){if(isDragging){isDragging=false;dragIdx=-1;buildP()}};
+
+// Poly helpers
+function pp(p){ctx.beginPath();for(var i=0;i<p.length;i++){if(i===0)ctx.moveTo(p[i][0]*W,p[i][1]*H);else ctx.lineTo(p[i][0]*W,p[i][1]*H)}ctx.closePath()}
+function eLen(p){var l=0;for(var i=0;i<p.length;i++){var j=(i+1)%p.length;var dx=(p[j][0]-p[i][0])*W,dy=(p[j][1]-p[i][1])*H;l+=Math.sqrt(dx*dx+dy*dy)}return l}
+function ptOn(p,d){var rem=d;for(var i=0;i<p.length;i++){var j=(i+1)%p.length;var dx=(p[j][0]-p[i][0])*W,dy=(p[j][1]-p[i][1])*H;var s=Math.sqrt(dx*dx+dy*dy);if(rem<=s){var t=rem/s;return{x:p[i][0]*W+dx*t,y:p[i][1]*H+dy*t}}rem-=s}return{x:p[0][0]*W,y:p[0][1]*H}}
+function polyCtr(p){var cx=0,cy=0;for(var i=0;i<p.length;i++){cx+=p[i][0];cy+=p[i][1]}return{x:cx/p.length*W,y:cy/p.length*H}}
+function polyBB(p){var x0=1,y0=1,x1=0,y1=0;for(var i=0;i<p.length;i++){if(p[i][0]<x0)x0=p[i][0];if(p[i][0]>x1)x1=p[i][0];if(p[i][1]<y0)y0=p[i][1];if(p[i][1]>y1)y1=p[i][1]}return{x:Math.floor(x0*W),y:Math.floor(y0*H),w:Math.ceil((x1-x0)*W),h:Math.ceil((y1-y0)*H),x1:Math.ceil(x1*W),y1:Math.ceil(y1*H)}}
+
+// ============ FILL RENDERERS (bounding-box optimized) ============
+function fNoise(r,t){var s=t*r.fillSpeed*0.3,sc=r.scale,st=10,bb=polyBB(r.poly);for(var y=bb.y;y<bb.y1;y+=st)for(var x=bb.x;x<bb.x1;x+=st){var nv=n2(x*0.03/sc+s,y*0.03/sc+s*0.7),v2=n2(x*0.008/sc-s*0.2,y*0.008/sc+s*0.4);ctx.fillStyle=hs(r.fillHue+v2*30,0.8,(nv*0.7+v2*0.3)*r.fillInt*0.5*gBright);ctx.fillRect(x,y,st,st)}}
+
+function fScan(r,t){var s=t*r.fillSpeed,a=r.angle*Math.PI/180,bb=polyBB(r.poly);for(var y=bb.y;y<bb.y1;y+=3){var d=Math.cos(a)*y+Math.sin(a)*W*0.5;var v=(Math.sin(d*0.08/r.scale+s*2)*0.5+0.5)*(Math.sin(d*0.4/r.scale+s*5)>0.6?1:0.4)*r.fillInt;ctx.fillStyle=hs(r.fillHue,0.7,v*0.4*gBright);ctx.fillRect(bb.x,y,bb.w,3)}}
+
+function fPulse(r,t){var s=t*r.fillSpeed,a=r.angle*Math.PI/180,bb=polyBB(r.poly);for(var x=bb.x;x<bb.x1;x+=5){var d=Math.cos(a)*x+Math.sin(a)*H*0.5;var v=(Math.sin(d*0.015/r.scale+s)*0.5+0.5)*(Math.sin(s*0.5)*0.3+0.7)*r.fillInt;ctx.fillStyle=hs(r.fillHue+Math.sin(s*0.3)*20,0.9,v*0.5*gBright);ctx.fillRect(x,bb.y,5,bb.h)}}
+
+function fBreath(r,t){var s=t*r.fillSpeed,v=(Math.sin(s*0.5)*0.4+0.5)*r.fillInt,bb=polyBB(r.poly);ctx.fillStyle=hs(r.fillHue+Math.sin(s*0.2)*15,0.6,v*0.4*gBright);ctx.fillRect(bb.x,bb.y,bb.w,bb.h)}
+
+function fRain(r,t){var s=t*r.fillSpeed,bb=polyBB(r.poly);for(var x=bb.x;x<bb.x1;x+=6){var co=(x*7+13)%23;for(var y=bb.y;y<bb.y1;y+=5){var dr=((y+s*200+co*47)%120)/120;if(dr<0.12){ctx.fillStyle=hs(r.fillHue,0.8,(1-dr/0.12)*r.fillInt*0.6*gBright);ctx.fillRect(x,y,5,5)}}}}
+
+function fStatic(r,t){var st=8,bb=polyBB(r.poly);for(var y=bb.y;y<bb.y1;y+=st)for(var x=bb.x;x<bb.x1;x+=st){ctx.fillStyle=hs(r.fillHue,0.3,Math.random()*r.fillInt*0.35*gBright);ctx.fillRect(x,y,st,st)}}
+
+function fPlasma(r,t){var s=t*r.fillSpeed*0.4,sc=r.scale,st=8,bb=polyBB(r.poly);for(var y=bb.y;y<bb.y1;y+=st)for(var x=bb.x;x<bb.x1;x+=st){var v=Math.sin(x*0.02/sc+s)+Math.sin(y*0.02/sc+s*0.7)+Math.sin((x+y)*0.015/sc+s*1.3)+Math.sin(Math.sqrt((x-bb.x)*(x-bb.x)+(y-bb.y)*(y-bb.y))*0.01/sc+s*0.5);v=(v+4)/8;ctx.fillStyle=hs(r.fillHue+v*120,0.8,v*r.fillInt*0.6*gBright);ctx.fillRect(x,y,st,st)}}
+
+function fGradient(r,t){var s=t*r.fillSpeed,a=(r.angle+s*30)*Math.PI/180,bb=polyBB(r.poly);var cx=bb.x+bb.w/2,cy=bb.y+bb.h/2,dx=Math.cos(a),dy=Math.sin(a),maxD=Math.sqrt(bb.w*bb.w+bb.h*bb.h)/2;for(var y=bb.y;y<bb.y1;y+=5)for(var x=bb.x;x<bb.x1;x+=5){var d=((x-cx)*dx+(y-cy)*dy)/maxD*0.5+0.5;d=Math.max(0,Math.min(1,d+Math.sin(s*0.3)*0.1));ctx.fillStyle=hs(r.fillHue+d*60,0.7,d*r.fillInt*0.6*gBright);ctx.fillRect(x,y,5,5)}}
+
+function fGrid(r,t){var s=t*r.fillSpeed,sc=Math.max(8,40*r.scale),lw=Math.max(1,2*r.scale),a=r.angle*Math.PI/180,bb=polyBB(r.poly);var diag=Math.sqrt(bb.w*bb.w+bb.h*bb.h);ctx.strokeStyle=hs(r.fillHue,0.8,r.fillInt*0.5*gBright);ctx.lineWidth=lw;ctx.save();ctx.translate(bb.x+bb.w/2,bb.y+bb.h/2);ctx.rotate(a);for(var i=-diag;i<diag;i+=sc){var off=Math.sin(s+i*0.01)*sc*0.1;ctx.beginPath();ctx.moveTo(-diag,i+off);ctx.lineTo(diag,i+off);ctx.stroke();ctx.beginPath();ctx.moveTo(i+off,-diag);ctx.lineTo(i+off,diag);ctx.stroke()}ctx.restore()}
+
+function fRipple(r,t){var s=t*r.fillSpeed,ctr=polyCtr(r.poly),sc=r.scale,st=6,bb=polyBB(r.poly);var maxR=Math.max(bb.w,bb.h)*0.5;for(var y=bb.y;y<bb.y1;y+=st)for(var x=bb.x;x<bb.x1;x+=st){var dx=x-ctr.x,dy=y-ctr.y,dist=Math.sqrt(dx*dx+dy*dy);var v=Math.sin(dist*0.05/sc-s*3)*0.5+0.5;v*=Math.max(0,1-dist/maxR);ctx.fillStyle=hs(r.fillHue+v*40,0.8,v*r.fillInt*0.6*gBright);ctx.fillRect(x,y,st,st)}}
+
+function fStripes(r,t){var s=t*r.fillSpeed,a=r.angle*Math.PI/180,w=Math.max(5,30*r.scale),bb=polyBB(r.poly);var diag=Math.sqrt(bb.w*bb.w+bb.h*bb.h);ctx.save();ctx.translate(bb.x+bb.w/2,bb.y+bb.h/2);ctx.rotate(a);for(var i=-diag;i<diag;i+=w){var phase=Math.sin(i*0.1+s*2)*0.5+0.5;ctx.fillStyle=hs(r.fillHue+phase*30,0.8,phase*r.fillInt*0.5*gBright);ctx.fillRect(-diag,i+s*20%w,diag*2,w*0.6)}ctx.restore()}
+
+var FD={noise:fNoise,scan:fScan,pulse:fPulse,breath:fBreath,rain:fRain,"static":fStatic,plasma:fPlasma,gradient:fGradient,grid:fGrid,ripple:fRipple,stripes:fStripes};
+
+// ============ EDGE RENDERERS ============
+function ePulse(r,t){var len=eLen(r.poly),s=t*r.edgeSpeed,pc=3,pl=len/pc;ctx.lineCap="round";for(var p=0;p<pc;p++){var hd=((s*80+p*pl)%len+len)%len;for(var i=0;i<20;i++){var d1=((hd-i*(pl*0.6/20))%len+len)%len,d2=((d1+pl*0.6/20)%len+len)%len;var p1=ptOn(r.poly,d1),p2=ptOn(r.poly,d2);ctx.strokeStyle=hs(r.edgeHue,0.9,(1-i/20)*r.edgeInt*0.6*gBright);ctx.lineWidth=r.edgeWidth*(1-i/20*0.5);ctx.beginPath();ctx.moveTo(p1.x,p1.y);ctx.lineTo(p2.x,p2.y);ctx.stroke()}}}
+
+function eFlow(r,t){var len=eLen(r.poly),s=t*r.edgeSpeed,ct=12,sp=len/ct;for(var p=0;p<ct;p++){var d=((s*60+p*sp)%len+len)%len,pt=ptOn(r.poly,d);ctx.fillStyle=hs(r.edgeHue+p*5,0.9,(Math.sin(s*3+p*0.8)*0.3+0.7)*r.edgeInt*0.6*gBright);ctx.beginPath();ctx.arc(pt.x,pt.y,r.edgeWidth*1.5,0,Math.PI*2);ctx.fill()}}
+
+function eStrobe(r,t){var s=t*r.edgeSpeed,lm=(Math.sin(s*4)*0.5+0.5)*r.edgeInt*0.7*gBright;ctx.strokeStyle=hs(r.edgeHue,1,lm);ctx.lineWidth=r.edgeWidth;pp(r.poly);ctx.stroke()}
+
+function eMaze(r,t){var len=eLen(r.poly),s=t*r.edgeSpeed,sl=12,sg=Math.floor(len/sl);for(var i=0;i<sg;i++){var ph=Math.sin(i*0.5+s*2)*0.5+0.5;if(ph<0.4)continue;var p1=ptOn(r.poly,i*sl),p2=ptOn(r.poly,Math.min((i+1)*sl,len));ctx.strokeStyle=hs(r.edgeHue+i*2,0.8,ph*r.edgeInt*0.6*gBright);ctx.lineWidth=r.edgeWidth*(0.5+ph*0.5);ctx.beginPath();ctx.moveTo(p1.x,p1.y);ctx.lineTo(p2.x,p2.y);ctx.stroke()}}
+
+function eGlow(r,t){var s=t*r.edgeSpeed;var pulse=Math.sin(s)*0.2+0.8;for(var g=4;g>=0;g--){var w=r.edgeWidth*(1+g*1.2);var alpha=(1-g/4)*0.3*r.edgeInt*gBright*pulse;ctx.strokeStyle="hsla("+((r.edgeHue%360+360)%360)+",90%,60%,"+alpha+")";ctx.lineWidth=w;pp(r.poly);ctx.stroke()}}
+
+function eDashes(r,t){var len=eLen(r.poly),s=t*r.edgeSpeed;var dashLen=Math.max(4,20*r.scale);var gapLen=dashLen*0.6;var total=dashLen+gapLen;var segs=Math.floor(len/total);ctx.lineCap="round";for(var i=0;i<segs;i++){var d1=(i*total+s*50)%len;var d2=(d1+dashLen)%len;var p1=ptOn(r.poly,d1),p2=ptOn(r.poly,d2);var phase=Math.sin(i*0.3+s*2)*0.3+0.7;ctx.strokeStyle=hs(r.edgeHue+i*3,0.9,phase*r.edgeInt*0.6*gBright);ctx.lineWidth=r.edgeWidth;ctx.beginPath();ctx.moveTo(p1.x,p1.y);ctx.lineTo(p2.x,p2.y);ctx.stroke()}}
+
+var ED={pulse:ePulse,flow:eFlow,strobe:eStrobe,maze:eMaze,glow:eGlow,dashes:eDashes};
+
+// ============ RENDER ============
+function render(){
+  if(mode==="edit"){
+    ctx.fillStyle="#000";ctx.fillRect(0,0,W,H);
+    if(mOk){ctx.globalAlpha=maskA;ctx.drawImage(mImg,0,0,W,H);ctx.globalAlpha=1}
+    for(var ri=0;ri<regs.length;ri++){
+      var r=regs[ri],act=ri===active;
+      if(r.poly.length<1)continue;
+      if(r.poly.length>=3&&r.closed){ctx.fillStyle=r.color+"22";pp(r.poly);ctx.fill()}
+      ctx.strokeStyle=act?"#fff":r.color;ctx.lineWidth=act?2:1;
+      ctx.beginPath();for(var j=0;j<r.poly.length;j++){if(j===0)ctx.moveTo(r.poly[j][0]*W,r.poly[j][1]*H);else ctx.lineTo(r.poly[j][0]*W,r.poly[j][1]*H)}
+      if(r.closed)ctx.closePath();ctx.stroke();
+      for(var j=0;j<r.poly.length;j++){
+        var isLast=j===r.poly.length-1&&!r.closed&&act,isDrg=act&&isDragging&&dragIdx===j;
+        ctx.fillStyle=isDrg?"#0ff":isLast?"#ff0":"#fff";
+        ctx.beginPath();ctx.arc(r.poly[j][0]*W,r.poly[j][1]*H,isDrg?6:act?4:3,0,Math.PI*2);ctx.fill();
+        if(act){ctx.fillStyle="#fff";ctx.font="9px Consolas";ctx.fillText(j,r.poly[j][0]*W+6,r.poly[j][1]*H-6)}
+      }
+      if(r.poly.length>0){ctx.fillStyle=hs(r.fillHue,0.8,0.6);ctx.font="11px Consolas";ctx.fillText(r.label,r.poly[0][0]*W+8,r.poly[0][1]*H-8)}
+    }
+  }else{
+    // Apply global mods to trails for the clear
+    var clearTrails=trails;
+    if(gMods.trails.wave!=="off")clearTrails=Math.max(0,Math.min(0.98,trails+lfo(gMods.trails.wave,time*gMods.trails.rate)*gMods.trails.depth));
+    if(clearTrails>0){ctx.fillStyle="rgba(0,0,0,"+(1-clearTrails)+")";ctx.fillRect(0,0,W,H)}
+    else{ctx.fillStyle="#000";ctx.fillRect(0,0,W,H)}
+    if(mOk&&maskA>0){ctx.globalAlpha=maskA*0.3;ctx.drawImage(mImg,0,0,W,H);ctx.globalAlpha=1}
+    updateAudio();
+    // Check if any region is soloed
+    var hasSolo=false;
+    for(var ri=0;ri<regs.length;ri++)if(regs[ri].solo){hasSolo=true;break}
+    for(var ri=0;ri<regs.length;ri++){
+      var r=applyMods(regs[ri],time);
+      if(!r.closed||r.poly.length<3)continue;
+      if(r.mute)continue;
+      if(hasSolo&&!r.solo)continue;
+      ctx.globalCompositeOperation=r.blend||"source-over";
+      ctx.globalAlpha=r.opacity;
+      if(r.fill!=="off"&&FD[r.fill]){ctx.save();pp(r.poly);ctx.clip();FD[r.fill](r,time+r.phase);ctx.restore()}
+      if(r.edge!=="off"&&ED[r.edge]){ctx.save();ED[r.edge](r,time+r.phase);ctx.restore()}
+      ctx.globalCompositeOperation="source-over";ctx.globalAlpha=1;
+    }
+    // Post-processing with global mods
+    var pt=time;
+    var mTrails=trails,mBloom=bloom,mVig=vignette,mChrom=chromab,mBlack=blackout;
+    if(gMods.trails.wave!=="off")mTrails=Math.max(0,Math.min(0.98,trails+lfo(gMods.trails.wave,pt*gMods.trails.rate)*gMods.trails.depth));
+    if(gMods.bloom.wave!=="off")mBloom=Math.max(0,Math.min(1,bloom+lfo(gMods.bloom.wave,pt*gMods.bloom.rate)*gMods.bloom.depth));
+    if(gMods.vignette.wave!=="off")mVig=Math.max(0,Math.min(1,vignette+lfo(gMods.vignette.wave,pt*gMods.vignette.rate)*gMods.vignette.depth));
+    if(gMods.chromab.wave!=="off")mChrom=Math.max(0,Math.min(1,chromab+lfo(gMods.chromab.wave,pt*gMods.chromab.rate)*gMods.chromab.depth));
+    if(gMods.blackout.wave!=="off")mBlack=Math.max(0,Math.min(1,blackout+lfo(gMods.blackout.wave,pt*gMods.blackout.rate)*gMods.blackout.depth));
+    if(mBloom>0){ctx.save();ctx.globalCompositeOperation="lighter";ctx.globalAlpha=mBloom*0.4;ctx.filter="blur("+Math.round(mBloom*12)+"px)";ctx.drawImage(c,0,0);ctx.filter="none";ctx.restore()}
+    if(mChrom>0){var off=Math.round(mChrom*6);ctx.save();ctx.globalCompositeOperation="lighter";ctx.globalAlpha=0.5;ctx.drawImage(c,off,0);ctx.drawImage(c,-off,0);ctx.restore()}
+    if(mVig>0){var vg=ctx.createRadialGradient(W/2,H/2,W*0.2,W/2,H/2,W*0.7);vg.addColorStop(0,"rgba(0,0,0,0)");vg.addColorStop(1,"rgba(0,0,0,"+mVig+")");ctx.fillStyle=vg;ctx.fillRect(0,0,W,H)}
+    if(mBlack>0){ctx.fillStyle="rgba(0,0,0,"+mBlack+")";ctx.fillRect(0,0,W,H)}
+    if(running)time+=0.016*gSpeed;
+  }
+  // FPS
+  frameCount++;var now=performance.now();
+  if(now-lastFpsTime>1000){fps=frameCount;frameCount=0;lastFpsTime=now}
+  if(mode==="animate"){ctx.fillStyle="#666";ctx.font="10px Consolas";ctx.fillText(fps+" fps",6,H-6)}
+  requestAnimationFrame(render);
+}
+
+// ============ PANEL ============
+function buildP(){
+  var el=document.getElementById("rc"),h="";
+  // Global
+  h+='<div class="sec"><div class="sh"><span>GLOBAL</span></div>';
+  h+='<div class="rw"><label>Speed</label><input type=range min=0.1 max=3 step=0.1 value='+gSpeed+' oninput="gSpeed=+this.value"></div>';
+  h+='<div class="rw"><label>Bright</label><input type=range min=0.1 max=2 step=0.05 value='+gBright+' oninput="gBright=+this.value"></div>';
+  h+='<div class="rw"><label>Mask</label><input type=range min=0 max=1 step=0.05 value='+maskA+' oninput="maskA=+this.value"></div>';
+  h+='<div class="rw"><label>Blackout</label><input type=range min=0 max=1 step=0.01 value='+blackout+' oninput="blackout=+this.value"></div>';
+  h+='<div class="sh" style="margin-top:4px"><span>POST FX</span></div>';
+  h+='<div class="rw"><label>Trails</label><input type=range min=0 max=0.98 step=0.01 value='+trails+' oninput="trails=+this.value"></div>';
+  h+='<div class="rw"><label>Bloom</label><input type=range min=0 max=1 step=0.05 value='+bloom+' oninput="bloom=+this.value"></div>';
+  h+='<div class="rw"><label>Vignette</label><input type=range min=0 max=1 step=0.05 value='+vignette+' oninput="vignette=+this.value"></div>';
+  h+='<div class="rw"><label>Chrom Ab</label><input type=range min=0 max=1 step=0.05 value='+chromab+' oninput="chromab=+this.value"></div>';
+  var gModKeys=["trails","bloom","vignette","chromab","blackout"];
+  var gModLbls={trails:"Trails",bloom:"Bloom",vignette:"Vignette",chromab:"ChromAb",blackout:"Blackout"};
+  h+='<div class="sh" style="margin-top:4px;cursor:pointer" onclick="var el=document.getElementById(\'gfxlfo\');el.style.display=el.style.display===\'none\'?\'block\':\'none\'"><span>▸ POST FX LFO</span></div>';
+  h+='<div id="gfxlfo" style="display:none">';
+  for(var gi=0;gi<gModKeys.length;gi++){
+    var gk=gModKeys[gi],gm=gMods[gk];
+    h+='<div class="mbx">';
+    h+='<div class="rw"><label style="color:#f9a;font-size:8px">'+gModLbls[gk]+'</label>';
+    h+='<select onclick="event.stopPropagation()" style="width:65px" onchange="gMods.'+gk+'.wave=this.value">';
+    for(var wi=0;wi<WAVES.length;wi++)h+='<option value="'+WAVES[wi]+'"'+(WAVES[wi]===gm.wave?' selected':'')+'>'+WLBL[WAVES[wi]]+'</option>';
+    h+='</select></div>';
+    h+='<div class="rw"><label style="font-size:8px">Rate</label><input type=range min=0.01 max=3 step=0.01 value='+gm.rate+' oninput="gMods.'+gk+'.rate=+this.value"></div>';
+    h+='<div class="rw"><label style="font-size:8px">Depth</label><input type=range min=0 max=1 step=0.01 value='+gm.depth+' oninput="gMods.'+gk+'.depth=+this.value"></div>';
+    h+='</div>';
+  }
+  h+='</div>';
+  h+='<div class="sh" style="margin-top:4px"><span>PALETTE</span></div>';
+  h+='<div class="pal">';
+  for(var pi=0;pi<palette.length;pi++)h+='<input type=color value="'+palette[pi]+'" oninput="palette['+pi+']=this.value">';
+  h+='</div></div>';
+  // Regions
+  for(var i=0;i<regs.length;i++){
+    var r=regs[i],act=i===active;
+    h+='<div class="sec'+(act?" act":"")+'" onclick="selReg('+i+')">';
+    h+='<div class="sh"><span style="color:hsl('+r.fillHue+',80%,60%)">● '+r.label+" ("+r.poly.length+(r.closed?" ✓":"")+")</span>";
+    h+='<button onclick="event.stopPropagation();delReg('+i+')">X</button></div>';
+    if(act){
+      h+='<div class="rw">';
+      h+='<button class="btn-sm" onclick="event.stopPropagation();moveUp('+i+')">▲</button>';
+      h+='<button class="btn-sm" onclick="event.stopPropagation();moveDown('+i+')">▼</button>';
+      if(r.closed)h+='<button class="btn-sm" style="color:#8f8" onclick="event.stopPropagation();reopenShape()">Reopen</button>';
+      h+='<button class="btn-sm" style="color:#aaf" onclick="event.stopPropagation();dupReg('+i+')">Dup</button>';
+      h+='<button class="btn-sm" style="color:'+(r.mute?"#f66":"#aaa")+'" onclick="event.stopPropagation();regs['+i+'].mute=!regs['+i+'].mute;buildP()">M</button>';
+      h+='<button class="btn-sm" style="color:'+(r.solo?"#ff0":"#aaa")+'" onclick="event.stopPropagation();regs['+i+'].solo=!regs['+i+'].solo;buildP()">S</button>';
+      h+='</div>';
+      // Fill
+      h+='<div class="rw"><label>Fill</label><select onclick="event.stopPropagation()" onchange="setFill('+i+',this.value)">';
+      for(var f=0;f<FT.length;f++)h+='<option value="'+FT[f]+'"'+(FT[f]===r.fill?" selected":"")+">"+FL[FT[f]]+"</option>";
+      h+="</select></div>";
+      h+='<div class="rw"><label>F.Hue</label><input type=range min=0 max=360 value='+r.fillHue+' oninput="regs['+i+'].fillHue=+this.value"></div>';
+      h+='<div class="rw"><label>F.Int</label><input type=range min=0 max=1 step=0.05 value='+r.fillInt+' oninput="regs['+i+'].fillInt=+this.value"></div>';
+      h+='<div class="rw"><label>F.Speed</label><input type=range min=0.1 max=5 step=0.1 value='+r.fillSpeed+' oninput="regs['+i+'].fillSpeed=+this.value"></div>';
+      // Edge
+      h+='<div class="rw"><label>Edge</label><select onclick="event.stopPropagation()" onchange="setEdge('+i+',this.value)">';
+      for(var e=0;e<ET.length;e++)h+='<option value="'+ET[e]+'"'+(ET[e]===r.edge?" selected":"")+">"+ELB[ET[e]]+"</option>";
+      h+="</select></div>";
+      h+='<div class="rw"><label>E.Hue</label><input type=range min=0 max=360 value='+r.edgeHue+' oninput="regs['+i+'].edgeHue=+this.value"></div>';
+      h+='<div class="rw"><label>E.Spd</label><input type=range min=0.1 max=5 step=0.1 value='+r.edgeSpeed+' oninput="regs['+i+'].edgeSpeed=+this.value"></div>';
+      h+='<div class="rw"><label>E.W</label><input type=range min=1 max=10 step=0.5 value='+r.edgeWidth+' oninput="regs['+i+'].edgeWidth=+this.value"></div>';
+      // Common
+      h+='<div class="rw"><label>Blend</label><select onclick="event.stopPropagation()" onchange="regs['+i+'].blend=this.value">';
+      for(var bi=0;bi<BLENDS.length;bi++)h+='<option value="'+BLENDS[bi]+'"'+(BLENDS[bi]===r.blend?' selected':'')+'>'+BLBL[BLENDS[bi]]+'</option>';
+      h+="</select></div>";
+      h+='<div class="rw"><label>Opacity</label><input type=range min=0 max=1 step=0.05 value='+r.opacity+' oninput="regs['+i+'].opacity=+this.value"></div>';
+      h+='<div class="rw"><label>Scale</label><input type=range min=0.1 max=4 step=0.1 value='+r.scale+' oninput="regs['+i+'].scale=+this.value"></div>';
+      h+='<div class="rw"><label>Angle</label><input type=range min=0 max=360 step=1 value='+r.angle+' oninput="regs['+i+'].angle=+this.value"></div>';
+      h+='<div class="rw"><label>Phase</label><input type=range min=0 max=6.28 step=0.1 value='+r.phase+' oninput="regs['+i+'].phase=+this.value"></div>';
+      // LFO
+      h+='<div class="sh" style="margin-top:4px;cursor:pointer" onclick="event.stopPropagation();var el=document.getElementById(\'lfo_'+i+'\');el.style.display=el.style.display===\'none\'?\'block\':\'none\'"><span>▸ LFO / AUDIO</span></div>';
+      h+='<div id="lfo_'+i+'" style="display:none">';
+      for(var mi=0;mi<MOD_PARAMS.length;mi++){
+        var mp=MOD_PARAMS[mi],mod=r.mods[mp];
+        if(!mod)continue;
+        h+='<div class="mbx">';
+        h+='<div class="rw"><label style="color:#9af;font-size:8px">'+MOD_LABELS[mp]+'</label>';
+        h+='<select onclick="event.stopPropagation()" style="width:65px" onchange="regs['+i+'].mods.'+mp+'.wave=this.value">';
+        for(var wi=0;wi<WAVES.length;wi++)h+='<option value="'+WAVES[wi]+'"'+(WAVES[wi]===mod.wave?' selected':'')+'>'+WLBL[WAVES[wi]]+'</option>';
+        h+='</select></div>';
+        h+='<div class="rw"><label style="font-size:8px">Rate</label><input type=range min=0.01 max=3 step=0.01 value='+mod.rate+' oninput="regs['+i+'].mods.'+mp+'.rate=+this.value"></div>';
+        var maxD=mp.indexOf("Hue")>=0?"180":mp==="angle"?"180":mp.indexOf("Width")>=0?"6":mp==="scale"?"2":"1";
+        h+='<div class="rw"><label style="font-size:8px">Depth</label><input type=range min=0 max='+maxD+' step=0.01 value='+mod.depth+' oninput="regs['+i+'].mods.'+mp+'.depth=+this.value"></div>';
+        h+='</div>';
+      }
+      h+='</div>'; // close collapsible lfo
+    }
+    h+="</div>";
+  }
+  el.innerHTML=h;
+}
+
+// ============ EXPORTS ============
+function doExport(){var ta=document.getElementById("jbox");ta.style.display="block";ta.value=JSON.stringify({regions:regs,palette:palette},null,1);ta.select()}
+function doImport(){var ta=document.getElementById("jbox");ta.style.display="block";try{var d=JSON.parse(ta.value);var arr=d.regions||d;regs=[];for(var i=0;i<arr.length;i++){var nr=mkReg(arr[i].label);for(var k in arr[i])nr[k]=arr[i][k];nr.color=COLS[i%COLS.length];regs.push(nr)}if(d.palette)palette=d.palette;active=0;buildP()}catch(e){alert("Bad JSON: "+e.message)}}
+function exportSVG(){var svg='<?xml version="1.0"?>\n<svg xmlns="http://www.w3.org/2000/svg" width="'+W+'" height="'+H+'" viewBox="0 0 '+W+' '+H+'">\n<rect id="canvas" x="0" y="0" width="'+W+'" height="'+H+'" fill="none" stroke="#333" stroke-width="2"/>\n';for(var i=0;i<regs.length;i++){var r=regs[i];if(!r.closed||r.poly.length<3)continue;var pts="";for(var j=0;j<r.poly.length;j++)pts+=(r.poly[j][0]*W).toFixed(2)+","+(r.poly[j][1]*H).toFixed(2)+" ";svg+='<polygon id="'+r.label.replace(/\s+/g,"_")+'" points="'+pts.trim()+'" fill="'+r.color+'" stroke="#fff" stroke-width="1"/>\n'}svg+="</svg>";dlFile("metamapper.svg",svg,"image/svg+xml")}
+function exportOBJ(){var obj="# TBG "+W+"x"+H+"\n",vO=1;obj+="o Canvas\nv 0 "+H+" 0\nv "+W+" "+H+" 0\nv "+W+" 0 0\nv 0 0 0\nf 1 2 3 4\n\n";vO=5;for(var i=0;i<regs.length;i++){var r=regs[i];if(!r.closed||r.poly.length<3)continue;obj+="o "+r.label.replace(/\s+/g,"_")+"\n";for(var j=0;j<r.poly.length;j++)obj+="v "+(r.poly[j][0]*W).toFixed(2)+" "+((1-r.poly[j][1])*H).toFixed(2)+" 0\n";obj+="f";for(var j=0;j<r.poly.length;j++)obj+=" "+(vO+j);obj+="\n\n";vO+=r.poly.length}dlFile("metamapper.obj",obj,"text/plain")}
+function exportBlenderSetup(){var py="import bpy\nW,H="+W+","+H+"\nbpy.context.scene.render.resolution_x=W\nbpy.context.scene.render.resolution_y=H\nbpy.context.scene.render.resolution_percentage=100\ncam=bpy.data.cameras.new('TBG_Cam')\ncam.type='ORTHO'\ncam.ortho_scale=W\nco=bpy.data.objects.new('TBG_Cam',cam)\nbpy.context.collection.objects.link(co)\nco.location=(W/2,H/2,10)\nbpy.context.scene.camera=co\nlt=bpy.data.lights.new('TBG_Sun',type='SUN')\nlt.energy=3\nlo=bpy.data.objects.new('TBG_Sun',lt)\nbpy.context.collection.objects.link(lo)\nlo.location=(W/2,H/2,8)\nlo.rotation_euler=(0.3,0.3,0)\nbpy.context.scene.render.film_transparent=True\nprint('TBG: "+W+"x"+H+" ortho cam ready')";dlFile("metamapper_setup.py",py,"text/x-python")}
+function dlFile(n,c,m){var b=new Blob([c],{type:m}),a=document.createElement("a");a.href=URL.createObjectURL(b);a.download=n;document.body.appendChild(a);a.click();document.body.removeChild(a)}
+
+// Init
+regs.push(mkReg());
+buildP();
+requestAnimationFrame(render);
+</script>
+</body>
+</html>
