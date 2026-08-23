@@ -20,6 +20,7 @@ Layer reordering, duplicate, solo/mute per region
 Open-path spline tool for text paths and standalone edge effects
 Fill Effects
 Noise, Scan Lines, Pulse, Breathe, Digital Rain, Static, Plasma, Gradient Sweep, Animated Grid, Ripple, and Stripes — each with per-region controls for hue, intensity, speed, scale, and angle.
+Image fill — new "Image" option in the Fill dropdown. Per region: Load Image button (file picker), a small thumbnail preview once loaded, Clear Image, a Fit mode (Cover / Contain / Tile), and Pos X / Pos Y sliders to pan the focal point within the shape.
 Edge Effects
 Chasing Pulse, Particle Flow, Strobe, Maze, Neon Glow, and Animated Dashes — with independent hue, speed, and width controls.
 Text
