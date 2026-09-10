@@ -426,7 +426,7 @@ function triggerImageUpload(i){
 }
 function loadRegionImage(r,dataUrl){
   var img=new Image();
-  img.onload=function(){r._img=img;r.imgLoaded=true;r.imgSrc=dataUrl;if(!r._imgHueSet){r.fillHue=0;r._imgHueSet=true}buildP()};
+  img.onload=function(){r._img=img;r.imgLoaded=true;r.imgSrc=dataUrl;if(!r._imgHueSet){r.fillHue=0;r._imgHueSet=true}if(regs[active]===r)buildP()};
   img.onerror=function(){r.imgLoaded=false};
   img.src=dataUrl;
 }
@@ -448,7 +448,7 @@ function loadRegionVideo(r,url){
   if(r._vid){try{r._vid.pause();if(r._vid.parentNode)r._vid.parentNode.removeChild(r._vid)}catch(e){}if(r.vidSrc)URL.revokeObjectURL(r.vidSrc)}
   var vid=document.createElement("video");
   vid.loop=true;vid.muted=r.vidMuted!==false;vid.playsInline=true;vid.autoplay=true;vid.setAttribute("playsinline","");
-  vid.oncanplay=function(){r._vid=vid;r.vidLoaded=true;r.vidSrc=url;if(r.vidPlaying!==false)vid.play().catch(function(){});buildP()};
+  vid.oncanplay=function(){r._vid=vid;r.vidLoaded=true;r.vidSrc=url;if(r.vidPlaying!==false)vid.play().catch(function(){});if(regs[active]===r)buildP()};
   vid.onerror=function(){r.vidLoaded=false};
   document.getElementById("vidPool").appendChild(vid);
   vid.src=url;
