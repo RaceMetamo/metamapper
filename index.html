@@ -60,6 +60,7 @@ canvas{position:absolute;top:0;left:0;width:100%;height:100%}
 </style>
 </head>
 <body>
+<div id="vidPool" style="position:fixed;left:-9999px;top:-9999px;width:2px;height:2px;overflow:hidden"></div>
 <div id="bar">
 <span class="t">METAMAPPER</span>
 <button class="on" onclick="toggleMode(this)">EDIT</button>
@@ -237,7 +238,7 @@ Each post-FX parameter has its own LFO/Audio modulation under "▸ POST FX LFO".
 <kbd>S</kbd> Solo — show only soloed regions.</p>
 
 <h3>Fill Effects</h3>
-<p>Noise, Scan Lines, Pulse, Breathe, Rain, Static, Plasma, Gradient, Grid, Ripple, Stripes, or Off.</p>
+<p>Noise, Scan Lines, Pulse, Breathe, Rain, Static, Plasma, Gradient, Grid, Ripple, Stripes, Solid, Checker, Wave, Voronoi, Image, Video, or Off. Image and Video fills load your own media per region — Fill Hue tints it, Fill Int controls brightness, and the region's Scale/Angle/Opacity sliders manipulate it directly. Video is not saved in exported JSON — reload it each session.</p>
 
 <h3>Edge Effects</h3>
 <p>Pulse (chasing light trails), Flow (orbiting particles), Strobe (flashing outline), Maze (segmented dashes), Glow (bloom outline), Dashes (animated dash pattern), or Off.</p>
@@ -277,8 +278,8 @@ var COLS=["#4466ff","#44dddd","#ff4444","#dd44dd","#44ff44","#ffaa22","#ff66aa",
 var palette=["#4488ff","#ff4488","#44ffaa","#ffaa22"];
 
 // Fill & Edge types
-var FT=["noise","scan","pulse","breath","rain","static","plasma","gradient","grid","ripple","stripes","solid","checker","wave","voronoi","image","off"];
-var FL={noise:"Noise",scan:"Scan",pulse:"Pulse",breath:"Breathe",rain:"Rain","static":"Static",plasma:"Plasma",gradient:"Gradient",grid:"Grid",ripple:"Ripple",stripes:"Stripes",solid:"Solid",checker:"Checker",wave:"Wave",voronoi:"Voronoi",image:"Image",off:"Off"};
+var FT=["noise","scan","pulse","breath","rain","static","plasma","gradient","grid","ripple","stripes","solid","checker","wave","voronoi","image","video","off"];
+var FL={noise:"Noise",scan:"Scan",pulse:"Pulse",breath:"Breathe",rain:"Rain","static":"Static",plasma:"Plasma",gradient:"Gradient",grid:"Grid",ripple:"Ripple",stripes:"Stripes",solid:"Solid",checker:"Checker",wave:"Wave",voronoi:"Voronoi",image:"Image",video:"Video",off:"Off"};
 var ET=["pulse","flow","strobe","maze","glow","dashes","double","dotted","off"];
 var ELB={pulse:"Pulse",flow:"Flow",strobe:"Strobe",maze:"Maze",glow:"Glow",dashes:"Dashes","double":"Double",dotted:"Dotted",off:"Off"};
 var BLENDS=["source-over","lighter","multiply","screen","overlay","difference"];
@@ -343,6 +344,7 @@ function mkReg(lbl){var i=regs.length;return{label:lbl||"Region "+(i+1),color:CO
   edge:"pulse",edgeHue:180+i*25,edgeSpeed:1.5,edgeWidth:3,edgeInt:0.9,
   blend:"source-over",opacity:1,scale:1,angle:0,phase:0,contrast:1,mute:false,solo:false,group:"",
   imgSrc:null,imgFit:"cover",imgOffsetX:0.5,imgOffsetY:0.5,_lfoOpen:false,
+  vidSrc:null,vidFit:"cover",vidOffsetX:0.5,vidOffsetY:0.5,vidMuted:true,vidPlaying:true,
   vorCells:12,vorSeed:0,
   text:"",textMode:"off",textSize:24,textSpeed:1,textFont:"Consolas",textOffset:0,textOutline:false,textReverse:false,textRepeat:1,type:"region",
   mods:{fillHue:{wave:"off",rate:0.5,depth:60},fillInt:{wave:"off",rate:0.3,depth:0.3},fillSpeed:{wave:"off",rate:0.2,depth:0.5},edgeHue:{wave:"off",rate:0.4,depth:40},edgeInt:{wave:"off",rate:0.5,depth:0.4},edgeSpeed:{wave:"off",rate:0.3,depth:1},edgeWidth:{wave:"off",rate:0.2,depth:2},scale:{wave:"off",rate:0.2,depth:0.5},angle:{wave:"off",rate:0.1,depth:45},opacity:{wave:"off",rate:0.3,depth:0.3},vorCells:{wave:"off",rate:0.1,depth:6},vorSeed:{wave:"off",rate:0.05,depth:50}}}}
@@ -392,7 +394,7 @@ function closeShape(){var r=regs[active];if(r&&r.poly.length>=3){saveUndo();r.cl
 function reopenShape(){var r=regs[active];if(r&&r.closed){saveUndo();r.closed=false;buildP()}}
 function selReg(i){active=i;buildP()}
 function delReg(i){saveUndo();regs.splice(i,1);if(active>=regs.length)active=Math.max(0,regs.length-1);buildP()}
-function dupReg(i){saveUndo();var r=regs[i];var nr=mkReg(r.label+" copy");for(var k in r){if(k==="label"||k==="color")continue;if(k==="_img"){nr._img=r._img;continue}nr[k]=typeof r[k]==="object"&&r[k]!==null?JSON.parse(JSON.stringify(r[k])):r[k]}nr.color=COLS[regs.length%COLS.length];regs.push(nr);active=regs.length-1;buildP()}
+function dupReg(i){saveUndo();var r=regs[i];var nr=mkReg(r.label+" copy");for(var k in r){if(k==="label"||k==="color")continue;if(k==="_img"||k==="_vid"){nr[k]=r[k];continue}nr[k]=typeof r[k]==="object"&&r[k]!==null?JSON.parse(JSON.stringify(r[k])):r[k]}nr.color=COLS[regs.length%COLS.length];regs.push(nr);active=regs.length-1;buildP()}
 function moveUp(i){if(i<=0)return;saveUndo();var t=regs[i];regs[i]=regs[i-1];regs[i-1]=t;if(active===i)active=i-1;else if(active===i-1)active=i;buildP()}
 function moveDown(i){if(i>=regs.length-1)return;saveUndo();var t=regs[i];regs[i]=regs[i+1];regs[i+1]=t;if(active===i)active=i+1;else if(active===i+1)active=i;buildP()}
 
@@ -431,6 +433,35 @@ function loadRegionImage(r,dataUrl){
 function clearRegionImage(i){var r=regs[i];r.imgSrc=null;r._img=null;r.imgLoaded=false;buildP()}
 // Rehydrate images after JSON import / preset load (Image objects aren't serializable)
 function rehydrateImages(){for(var i=0;i<regs.length;i++){if(regs[i].imgSrc&&!regs[i]._img){(function(rr){loadRegionImage(rr,rr.imgSrc)})(regs[i])}}}
+
+// Per-region video loading
+function triggerVideoUpload(i){
+  var inp=document.createElement("input");inp.type="file";inp.accept="video/*";
+  inp.onchange=function(){
+    if(!inp.files[0])return;
+    var url=URL.createObjectURL(inp.files[0]);
+    loadRegionVideo(regs[i],url);
+  };
+  inp.click();
+}
+function loadRegionVideo(r,url){
+  if(r._vid){try{r._vid.pause();if(r._vid.parentNode)r._vid.parentNode.removeChild(r._vid)}catch(e){}if(r.vidSrc)URL.revokeObjectURL(r.vidSrc)}
+  var vid=document.createElement("video");
+  vid.loop=true;vid.muted=r.vidMuted!==false;vid.playsInline=true;vid.autoplay=true;vid.setAttribute("playsinline","");
+  vid.oncanplay=function(){r._vid=vid;r.vidLoaded=true;r.vidSrc=url;if(r.vidPlaying!==false)vid.play().catch(function(){});buildP()};
+  vid.onerror=function(){r.vidLoaded=false};
+  document.getElementById("vidPool").appendChild(vid);
+  vid.src=url;
+}
+function clearRegionVideo(i){
+  var r=regs[i];
+  if(r._vid){try{r._vid.pause();if(r._vid.parentNode)r._vid.parentNode.removeChild(r._vid)}catch(e){}}
+  if(r.vidSrc)URL.revokeObjectURL(r.vidSrc);
+  r.vidSrc=null;r._vid=null;r.vidLoaded=false;buildP();
+}
+function toggleVidPlay(i){var r=regs[i];if(!r._vid)return;r.vidPlaying=!r.vidPlaying;if(r.vidPlaying)r._vid.play().catch(function(){});else r._vid.pause();buildP()}
+function toggleVidMute(i){var r=regs[i];if(!r._vid)return;r.vidMuted=!r.vidMuted;r._vid.muted=r.vidMuted;buildP()}
+function restartVid(i){var r=regs[i];if(!r._vid)return;r._vid.currentTime=0}
 
 // Undo/Redo
 function saveUndo(){undoStack.push(JSON.stringify(regs));if(undoStack.length>maxUndo)undoStack.shift();redoStack=[]}
@@ -512,7 +543,50 @@ function fRipple(r,t){var s=t*r.fillSpeed,ctr=polyCtr(r.poly),sc=r.scale,st=6,bb
 
 function fStripes(r,t){var s=t*r.fillSpeed,a=r.angle*Math.PI/180,w=Math.max(5,30*r.scale),bb=polyBB(r.poly);var diag=Math.sqrt(bb.w*bb.w+bb.h*bb.h);ctx.save();ctx.translate(bb.x+bb.w/2,bb.y+bb.h/2);ctx.rotate(a);for(var i=-diag;i<diag;i+=w){var phase=Math.sin(i*0.1+s*2)*0.5+0.5;ctx.fillStyle=hs(r.fillHue+phase*30,0.8,phase*r.fillInt*0.5*gBright);ctx.fillRect(-diag,i+s*20%w,diag*2,w*0.6)}ctx.restore()}
 
-var FD={noise:fNoise,scan:fScan,pulse:fPulse,breath:fBreath,rain:fRain,"static":fStatic,plasma:fPlasma,gradient:fGradient,grid:fGrid,ripple:fRipple,stripes:fStripes,solid:fSolid,checker:fChecker,wave:fWave,voronoi:fVoronoi,image:fImage};
+var FD={noise:fNoise,scan:fScan,pulse:fPulse,breath:fBreath,rain:fRain,"static":fStatic,plasma:fPlasma,gradient:fGradient,grid:fGrid,ripple:fRipple,stripes:fStripes,solid:fSolid,checker:fChecker,wave:fWave,voronoi:fVoronoi,image:fImage,video:fVideo};
+
+function fVideo(r,t){
+  if(!r._vid||!r.vidLoaded)return;
+  var vid=r._vid;
+  if(vid.readyState<2)return;
+  var iw=vid.videoWidth,ih=vid.videoHeight;
+  if(!iw||!ih)return;
+  var bb=polyBB(r.poly);
+  var cx=bb.x+bb.w*0.5,cy=bb.y+bb.h*0.5;
+  var s=t*(r.fillSpeed||1);
+  var driftScale=1+Math.sin(s*0.15)*0.015*Math.min(3,r.fillSpeed);
+  var driftAngle=Math.sin(s*0.08)*1.2;
+  ctx.save();
+  var hueDeg=r.fillHue||0;
+  var bright=0.25+Math.max(0,Math.min(1,r.fillInt))*1.25;
+  ctx.filter="hue-rotate("+hueDeg+"deg) brightness("+bright.toFixed(2)+") saturate("+(hueDeg===0?1:1.3)+")";
+  ctx.translate(cx,cy);
+  ctx.rotate(((r.angle||0)+driftAngle)*Math.PI/180);
+  ctx.scale((r.scale||1)*driftScale,(r.scale||1)*driftScale);
+  ctx.translate(-cx,-cy);
+  var fit=r.vidFit||"cover";
+  if(fit==="tile"){
+    var tileScale=bb.h/ih;
+    var tw=iw*tileScale,th=ih*tileScale;
+    var offX=(r.vidOffsetX-0.5)*tw*2,offY=(r.vidOffsetY-0.5)*th*2;
+    for(var yy=bb.y-th*2;yy<bb.y1+th*2;yy+=th)
+      for(var xx=bb.x-tw*2;xx<bb.x1+tw*2;xx+=tw)
+        ctx.drawImage(vid,xx+offX,yy+offY,tw,th);
+  }else{
+    var boxAR=bb.w/bb.h,imgAR=iw/ih,drawW,drawH;
+    if(fit==="contain"){
+      if(imgAR>boxAR){drawW=bb.w;drawH=bb.w/imgAR}else{drawH=bb.h;drawW=bb.h*imgAR}
+    }else{
+      if(imgAR>boxAR){drawH=bb.h;drawW=bb.h*imgAR}else{drawW=bb.w;drawH=bb.w/imgAR}
+    }
+    var ox=(r.vidOffsetX-0.5)*Math.max(0,drawW-bb.w);
+    var oy=(r.vidOffsetY-0.5)*Math.max(0,drawH-bb.h);
+    var dx=bb.x-(drawW-bb.w)*0.5-ox;
+    var dy=bb.y-(drawH-bb.h)*0.5-oy;
+    ctx.drawImage(vid,dx,dy,drawW,drawH);
+  }
+  ctx.restore();
+}
 
 function fImage(r,t){
   if(!r._img||!r.imgLoaded)return;
@@ -874,6 +948,23 @@ function buildP(){
         h+='<div class="rw"><label style="font-size:8px;color:#666">Fill Hue = tint · Fill Int = brightness</label></div>';
         h+='<div class="rw"><label style="font-size:8px;color:#666">Scale/Angle/Opacity below control the image too</label></div>';
       }
+      if(r.fill==="video"){
+        h+='<div class="rw"><label>Video</label><button class="btn-sm" onclick="event.stopPropagation();triggerVideoUpload('+i+')">'+(r.vidLoaded?"Replace":"Load Video")+'</button></div>';
+        if(r.vidLoaded){
+          h+='<div class="rw">';
+          h+='<button class="btn-sm" onclick="event.stopPropagation();toggleVidPlay('+i+')">'+(r.vidPlaying!==false?"Pause":"Play")+'</button>';
+          h+='<button class="btn-sm" onclick="event.stopPropagation();toggleVidMute('+i+')">'+(r.vidMuted!==false?"Unmute":"Mute")+'</button>';
+          h+='<button class="btn-sm" onclick="event.stopPropagation();restartVid('+i+')">Restart</button>';
+          h+='</div>';
+          h+='<div class="rw"><button class="btn-sm" style="color:#f66" onclick="event.stopPropagation();clearRegionVideo('+i+')">Clear Video</button></div>';
+        }
+        h+='<div class="rw"><label>Fit</label><select onclick="event.stopPropagation()" onmousedown="event.stopPropagation()" onchange="setP('+i+',\'vidFit\',this.value)"><option value="cover"'+(r.vidFit==="cover"?" selected":"")+'>Cover</option><option value="contain"'+(r.vidFit==="contain"?" selected":"")+'>Contain</option><option value="tile"'+(r.vidFit==="tile"?" selected":"")+'>Tile</option></select></div>';
+        h+='<div class="rw"><label>Pos X</label><input type=range min=0 max=1 step=0.01 value='+r.vidOffsetX+' oninput="setP('+i+',\'vidOffsetX\',+this.value)"></div>';
+        h+='<div class="rw"><label>Pos Y</label><input type=range min=0 max=1 step=0.01 value='+r.vidOffsetY+' oninput="setP('+i+',\'vidOffsetY\',+this.value)"></div>';
+        h+='<div class="rw"><label style="font-size:8px;color:#666">Fill Hue = tint · Fill Int = brightness</label></div>';
+        h+='<div class="rw"><label style="font-size:8px;color:#666">Scale/Angle/Opacity below control the video too</label></div>';
+        h+='<div class="rw"><label style="font-size:8px;color:#666">Video not saved in JSON — reload per session</label></div>';
+      }
       }
       // Edge
       h+='<div class="rw"><label>Edge</label><select onclick="event.stopPropagation()" onmousedown="event.stopPropagation()" onchange="setEdge('+i+',this.value)">';
@@ -929,7 +1020,8 @@ function buildP(){
 
 // ============ EXPORTS ============
 function doExport(){
-  var clean=regs.map(function(r){var o={};for(var k in r){if(k!=="_img")o[k]=r[k]}return o});
+  var skip={"_img":1,"_vid":1,"vidSrc":1};
+  var clean=regs.map(function(r){var o={};for(var k in r){if(!skip[k])o[k]=r[k]}return o});
   var data=JSON.stringify({regions:clean,palette:palette},null,1);
   dlFile("metamapper_project.json",data,"application/json");
   var ta=document.getElementById("jbox");ta.style.display="block";ta.value=data;
