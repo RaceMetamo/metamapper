@@ -1,118 +1,164 @@
-MetaMapper
-Browser-based polygon editor and generative animation tool for projection mapping.
+# MetaMapper
 
-MetaMapper lets you trace projection surfaces over a reference mask image, assign animated fill and edge effects to each region, modulate parameters with LFOs or live audio, and record the output — all from a single HTML file with zero dependencies.
+**Browser-based projection mapping and generative animation tool.**
 
-Developed by Metamo Industries as part of The Bridge Gallery (TBG) — a permanent projection mapping installation and creative exhibition space at 23 Haji Lane, Singapore.
+MetaMapper lets you map projection surfaces (by hand on site, from a mask image, or automatically from a webcam), fill each surface with generative effects, images, video or live feeds from other tools, modulate everything with LFOs or live audio, and record the result. It runs as a single HTML file with no install, no build step and no dependencies.
 
+Developed by [Metamo Industries](https://metamoind.com) for the **Haji Lane Projection Hub at The Bridge Gallery (TBG)**, 23 Haji Lane, Singapore.
 
-Live Demo
-Launch MetaMapper →
+---
 
-No installation required. Works in Chrome, Edge, and other Chromium-based browsers.
+## Launch
 
+**[Open MetaMapper →](https://racemetamo.github.io/metamapper/)**
 
-Features
-Polygon Editor
-Trace regions over a loaded mask/reference image
-Vertex dragging, undo, reopen closed shapes
-Layer reordering, duplicate, solo/mute per region
-Open-path spline tool for text paths and standalone edge effects
-Fill Effects
-Noise, Scan Lines, Pulse, Breathe, Digital Rain, Static, Plasma, Gradient Sweep, Animated Grid, Ripple, and Stripes — each with per-region controls for hue, intensity, speed, scale, and angle.
-Image fill — new "Image" option in the Fill dropdown. Per region: Load Image button (file picker), a small thumbnail preview once loaded, Clear Image, a Fit mode (Cover / Contain / Tile), and Pos X / Pos Y sliders to pan the focal point within the shape.
-Edge Effects
-Chasing Pulse, Particle Flow, Strobe, Maze, Neon Glow, and Animated Dashes — with independent hue, speed, and width controls.
-Text
-Text input per region or spline
-Three modes: Center, Follow Edge (text orbits the polygon/spline perimeter), Scroll (marquee)
-Font selection, size, speed, and perpendicular offset from the path
-Overlap detection at sharp corners
-LFO & Audio Reactivity
-Every parameter (fill hue, edge speed, opacity, scale, angle, etc.) can be modulated by:
+Works in Chrome, Edge and other Chromium browsers. It opens with The Bridge Gallery's wall already mapped, so you can switch to **ANIMATE** and start designing straight away.
 
-Waveforms: Sine, Triangle, Sawtooth, Square, Noise
-Live audio: Bass, Mid, and High frequency bands via microphone input
-Post-Processing
-Trails — motion echo/ghosting (adjustable persistence)
-Bloom — gaussian glow with additive blending
-Vignette — radial edge darkening
-Chromatic Aberration — RGB channel offset
-All post-FX have their own LFO/audio modulation
-Global Controls
-Speed, brightness, blackout (master fade)
-Hue shift, saturation, contrast
-Four-colour palette
-Render resolution toggle (½× for performance, 1× for recording)
-Recording & Export
-MP4 video recording directly from the canvas
-PNG screenshot capture
-JSON project save/load (regions, effects, palette, all settings)
-SVG vector export of traced regions
-OBJ 3D mesh export with canvas-bounds reference quad
-Blender Python script for orthographic camera setup matching your canvas dimensions
-Presets saved to browser localStorage
-Blend Modes
-Per-region compositing: Normal, Add, Multiply, Screen, Overlay, Difference.
-Randomize
-One-click randomization of all region effects, with auto-randomize at configurable intervals (2–32 seconds).
+---
 
+## Features
 
-Quick Start
-Open MetaMapper in Chrome
-Click Mask to load your projection mask template as a reference background
-Click on the canvas to place polygon vertices over the mask
-Click Close when your shape has 3+ points
-Click + Region to start tracing the next panel — repeat for all surfaces
-Toggle EDIT → ANIMATE to see your effects live
-Click Unmask to drop the reference image for better performance
-Use ⏺ to record MP4 or 📷 for PNG stills
-Splines
-Click + Spline to create an open path for text or standalone edge effects. Place points along the path, then click Close when done placing (the path stays geometrically open).
-Sharing Projects
-JSON ↓ downloads your complete project as a .json file
-JSON ↑ loads a previously exported project file
-Share the .json alongside MetaMapper for full project transfer
+### Mapping
+- **Polygon regions and open splines**, traced by clicking over a reference mask image
+- Drag points, right-click to delete a point, reopen closed shapes, layer reordering, duplicate, solo/mute
+- **Rename** regions and **group** them, so separate shapes at the same depth share every effect setting
+- **Undo / redo** for all shape and layer changes
+- Labels shown in the centre of each shape while editing
 
+### On-site mapping with a projector
+- **📽 Projector** opens a second window for the projector. In Chrome it can move itself onto the second display; double-click it or press F for fullscreen
+- In Edit mode the projector shows each shape as a flat colour with outlines and labels, plus a **crosshair** following your mouse, so you can see exactly where every point lands on the wall
+- Optional **light grid** (adjustable divisions) for finding your way around the projector frame
+- Drag points on **either screen**: the laptop or the projector itself
+- **MAP / live map** keeps outlines, crosshair and point editing on top of the running animation, so you can fine-tune alignment with content playing
+- Keyboard nudging for precise alignment: arrows move the selected point 1px (Shift 10px, Alt ¼px), Tab selects the next point, Delete removes it
+- Grid, crosshair, outlines and the fps counter never appear in recordings or stills, only the content does
 
-Using with Projection Mapping Software
-SignCloud / Media Server Playback
-Record your animations as MP4 at 1× resolution, then upload to your media server for playback. The canvas matches your projector's native resolution when a mask is loaded.
-Resolume / VJ Software
-Use OBS with the Spout2 Plugin to window-capture the fullscreen canvas and output as a Spout source that Resolume picks up natively.
-Blender
-Export OBJ + Blender .py setup script. Import the OBJ into Blender, run the Python script to create a pixel-aligned orthographic camera, then extrude and light your panel geometry in 3D.
-TouchDesigner
-Load the exported OBJ into a File In SOP. Set up a Camera COMP with orthographic projection matching your canvas dimensions.
-After Effects
-Record MP4 directly from MetaMapper and import into AE for compositing with other content.
+### Scan / auto-mask
+Builds regions automatically instead of tracing by hand.
+- **From a mask image:** loads your template and traces each panel. In Colour mode, touching panels of different colours come out as separate shapes (the TBG template traces into all 8 panels in one click)
+- **From a webcam on site:**
+  1. **Calibrate.** Auto flashes the projector black then white and finds the projected frame in the camera image; or drag the four corners by hand onto the bright corner blocks the projector shows. Calibration is remembered on that computer
+  2. **Detect.** The projector lights the wall white so the camera sees the real surfaces. Choose **Brightness**, **Colour** or **Edges / lines** mode and tune threshold, blur, size limits and point simplification until the outlines match
+  3. **Add as regions** (or Replace all), then refine the points on the projector
+- Freeze a camera frame, choose between multiple cameras
 
+### Fill effects
+Noise, Scan Lines, Pulse, Breathe, Rain, Static, Plasma, Gradient, Grid, Ripple, Stripes, Solid, Checker, Wave, Voronoi (with cell count and seed for shifting fracture patterns), **Image**, **Video** and **Source** (live feeds, see below).
 
-The Bridge Gallery
-MetaMapper was created as part of The Bridge Gallery (TBG) — a permanent projection mapping hub at 23 Haji Lane, Singapore. TBG serves as both a living canvas for projection art in the heart of Kampong Glam and a platform for opening up access to projection mapping tools and workflows to a wider creative community.
+Every fill has hue, intensity, speed, scale, angle, opacity and phase controls.
 
-We are building toward an Open Call for submissions — inviting artists to create projection mapping content for the Haji Lane facade using MetaMapper and related tools. Stay tuned via @metamo_industries and @thebridgegallery.sg for announcements.
+### Images, video and live sources
+- **Image** and **Video** fills per region, with Cover / Contain / Tile fit and X/Y position. Fill Hue tints the media, Fill Int sets brightness, and Scale / Angle / Opacity manipulate it like any other effect. Video has play/pause, mute and restart
+- **Live sources** feed regions from outside MetaMapper:
+  - **Unlimiter tools:** opens a tool page in its own window and pipes its canvas in live
+  - **Tab / window capture:** any browser tab, app window or screen (TouchDesigner, Resolume previews, anything)
+  - **Camera:** a webcam as a live texture
 
+### Edge effects
+Chasing Pulse, Particle Flow, Strobe, Maze, Neon Glow, Animated Dashes, Double Stroke and Dotted, each with hue, speed and width.
 
-Technical Notes
-Single self-contained HTML file — no build step, no dependencies, no server required
-All rendering via Canvas 2D API
-Audio reactivity via Web Audio API (microphone input)
-Recording via MediaRecorder API (MP4 in Chrome, WebM fallback)
-Polygon coordinates stored as normalized 0–1 values — resolution-independent
-Presets persist in browser localStorage
+### Text
+- Text per region or spline in three modes: **Center**, **Follow Edge** (text travels around the shape or along the spline) and **Scroll**
+- Font choice, size, speed, offset from the path, repeat count, outline and reverse direction
+- Characters skip rather than pile up at tight corners
 
+### Modulation and audio
+Every major parameter can be driven by an LFO (Sine, Triangle, Sawtooth, Square, Noise) or by live audio from the microphone (Bass, Mid, High bands), with rate and depth per parameter. Post effects have their own modulation too.
 
-Credits
-MetaMapper by Metamo Industries Pte. Ltd.
+### Post-processing and global controls
+- Trails, Bloom, Vignette, Chromatic Aberration
+- Global speed, brightness, blackout, hue shift, saturation, contrast and a four-colour palette
+- Per-region blend modes: Normal, Add, Multiply, Screen, Overlay, Difference
+- Horizontal and vertical **mirror** for symmetrical facades
 
-Metamo Industries is a Singapore-based immersive media studio specialising in projection mapping, interactive installations, XR, and real-time engine work.
+### Performance tools
+- **Tap tempo** sets global speed from your BPM
+- **Randomize** all regions in one click, or auto-randomize every 2 to 32 seconds
+- **Copy / paste style** between regions
+- Render at ½× resolution for smooth editing, 1× for final output; **Unmask** drops the reference image for extra performance
 
-Website: metamoind.com
-Instagram: @metamo_industries
-The Bridge Gallery: @thebridgegallery.sg
+### Recording and export
+- **MP4** recording straight from the browser (WebM fallback) and **PNG** stills
+- **JSON** project files: download a project and load it back later or on another machine (includes images; video and live sources are re-added per session)
+- **Presets** saved in the browser
+- **SVG** of the traced shapes, **OBJ** mesh with a canvas-bounds reference quad, and a **Blender Python script** that sets up an orthographic camera matching your canvas
 
+---
 
-License
+## Quick start
+
+### Design for The Bridge Gallery wall
+1. Open MetaMapper and click **START CREATING**
+2. Switch **EDIT → ANIMATE**
+3. Pick fills, edges, text, colours and modulation for each region in the side panel
+4. Record with **⏺** or grab a still with **📷**
+5. Submit through the [submission form](https://docs.google.com/forms/d/e/1FAIpQLScgH7YNImUIldbjQlcJnveA_4H4z2rWt9FdS0cnP5mekzZEUA/viewform)
+
+### Map a new surface from a mask image
+1. **Mask** → load your template image
+2. **Scan** → Source: Loaded mask image → Show scan preview → Mode: Colour
+3. Adjust until the yellow outlines match, then **Add as regions**
+
+### Map a surface on site
+1. Connect the projector as a second display and click **📽 Projector**; make it fullscreen on the projector
+2. Either trace shapes by hand while watching the projector, or use **Scan** with a webcam: Camera on → Calibrate (Auto) → Show scan preview → tune → Add as regions
+3. Refine points by dragging on either screen or nudging with the arrow keys
+4. Switch to ANIMATE and turn on **MAP** to fine-tune with content running
+
+### Use an Unlimiter tool as a layer
+1. Open **Sources** → enter the tool's address → **+ Tool**
+2. Set a region's Fill to **Source** and pick it
+3. Adjust the tool in its own window; the region updates live
+
+---
+
+## Good to know
+- **Same-site rule for tools.** + Tool only works when the tool and MetaMapper are on the same site (both on racemetamo.github.io works; a downloaded copy of MetaMapper doesn't). For anything else, use **+ Tab / window**
+- **Keep feeding windows visible.** Browsers slow down hidden windows, so keep tool windows open and on screen
+- **Camera scanning** works best in a dim space with the camera roughly facing the wall. Expect to tune Threshold and Blur on site
+- **Pop-ups** must be allowed for the projector and tool windows
+- Live sources and videos aren't saved in JSON files; re-add them after reloading
+
+---
+
+## Using MetaMapper with other software
+
+- **SignCloud / media servers:** record MP4 at 1× resolution and upload it
+- **Resolume:** capture the projector window in OBS with the [Spout2 plugin](https://github.com/Off-World-Live/obs-spout2-plugin) and pick it up as a Spout source
+- **Blender:** export OBJ plus the Blender script, import the OBJ, run the script for a pixel-aligned orthographic camera, then extrude and light the panels
+- **TouchDesigner:** load the OBJ into a File In SOP and use an orthographic Camera COMP at your canvas size
+- **After Effects:** import the recorded MP4 directly
+
+---
+
+## The Bridge Gallery
+
+The Bridge Gallery is a permanent projection mapping installation and creative exhibition space at [23 Haji Lane](https://maps.google.com/?q=23+Haji+Lane+Singapore), in the heart of Kampong Glam. It is both a living canvas for projection art and a platform for opening up projection mapping tools and workflows to the wider creative community.
+
+We're always looking for new content for the wall. Template files (mask, OBJ, Blender setup) are in the [template folder](https://drive.google.com/drive/folders/1FgiCvftnAhpEMHPaC3dgRQcePjTkURjQ?usp=drive_link), and work can be sent in through the [submission form](https://docs.google.com/forms/d/e/1FAIpQLScgH7YNImUIldbjQlcJnveA_4H4z2rWt9FdS0cnP5mekzZEUA/viewform).
+
+---
+
+## Technical notes
+- Single self-contained HTML file; all rendering with the Canvas 2D API
+- Content renders to an off-screen canvas; the operator view, projector window and recordings each take their own copy, so editing overlays never leak into output
+- Shape coordinates are stored as 0–1 values, so projects work at any resolution
+- Audio via the Web Audio API; recording via MediaRecorder; cameras and tab capture via getUserMedia / getDisplayMedia; projector placement via Chrome's Window Management API
+- Webcam calibration uses a four-corner perspective (homography) transform; detection uses thresholding, colour-aware region labelling, Sobel edges, contour tracing and Douglas–Peucker simplification
+
+---
+
+## Credits
+
+**MetaMapper** by [Metamo Industries Pte. Ltd.](https://metamoind.com), a Singapore-based immersive media studio specialising in projection mapping, interactive installations, XR and real-time engine work.
+
+- Website: [metamoind.com](https://metamoind.com)
+- Instagram: [@metamo_industries](https://www.instagram.com/metamo_industries)
+- The Bridge Gallery: [@thebridgegallery.sg](https://www.instagram.com/thebridgegallery.sg)
+
+---
+
+## License
+
 © Metamo Industries Pte. Ltd. All rights reserved.
-
