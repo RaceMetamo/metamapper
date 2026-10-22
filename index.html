@@ -1088,6 +1088,7 @@ function schedule(){
 }
 function frame(){
   lastRender=performance.now();
+  try{pumpTools()}catch(e){}
   try{scanTick();render()}catch(e){console.error(e)}
   schedule();
 }
@@ -1396,6 +1397,32 @@ function pickSource(i,v){
     captureDisplay().then(function(st){var t=st.getVideoTracks()[0];var s=addSource("tab",(t&&t.label)||"Captured tab",st);setP(i,"srcId",s.id);buildP()}).catch(function(){buildP()});return}
   setP(i,"srcId",v);buildP();
 }
+/* Browsers stop a page's animation frames once its window is minimised (or fully covered),
+   so a tool popup would freeze the moment it is out of sight. MetaMapper is on screen anyway —
+   it drives the projector — so it takes over the tool's frame clock: the tool's
+   requestAnimationFrame callbacks are queued and run from MetaMapper's own frame, and
+   the region draws the tool's canvas straight after, in the same moment. */
+function bridgeTool(s){
+  var w=s.win;if(!w||w.closed)return false;
+  try{
+    if(w.__mmBridge)return true;
+    var q=[],seq=1;
+    w.__mmQ=q;
+    w.requestAnimationFrame=function(cb){var h=seq++;q.push([h,cb]);return h};
+    w.cancelAnimationFrame=function(h){for(var i=q.length-1;i>=0;i--)if(q[i][0]===h)q.splice(i,1)};
+    w.__mmBridge=true;
+    return true;
+  }catch(e){return false}
+}
+function pumpTools(){
+  for(var i=0;i<sources.length;i++){
+    var s=sources[i];if(s.kind!=="tool"||!s.win||s.win.closed)continue;
+    var q;try{q=s.win.__mmQ}catch(e){continue}
+    if(!q||!q.length)continue;
+    var batch=q.splice(0,q.length),now;try{now=s.win.performance.now()}catch(e){now=performance.now()}
+    for(var k=0;k<batch.length;k++){try{batch[k][1](now)}catch(e){console.warn("[tool "+s.name+"]",e)}}
+  }
+}
 function updSrcStatus(s){var el=document.getElementById("srcst_"+s.id);if(el)el.textContent=s.status;
   document.querySelectorAll('[data-srcst="'+s.id+'"]').forEach(function(e){e.textContent=s.status||"";e.style.color=/^live/.test(s.status||"")?"#8f8":"#f9a"})}
 function pollToolSources(){
@@ -1407,12 +1434,13 @@ function pollToolSources(){
     var best=null,ba=0,cvs=doc.querySelectorAll("canvas");
     for(var i=0;i<cvs.length;i++){var cv=cvs[i],a=cv.width*cv.height;if(cv.offsetWidth>0&&a>ba){ba=a;best=cv}}
     if(!best){if(s.status!=="no canvas yet"){s.status="no canvas yet";updSrcStatus(s)}return}
+    s.bridged=bridgeTool(s);
     if(best!==s.canvas||!s.stream||s.ended){
       try{
         var st=best.captureStream(30);
         if(s.video&&s.video.parentNode)s.video.parentNode.removeChild(s.video);
         if(s.stream)s.stream.getTracks().forEach(function(t){t.stop()});
-        s.stream=st;s.video=mkStreamVideo(st);s.canvas=best;s.ended=false;s.status="live "+best.width+"×"+best.height;updSrcStatus(s);
+        s.stream=st;s.video=mkStreamVideo(st);s.canvas=best;s.ended=false;s.status="live "+best.width+"×"+best.height+(s.bridged?" · keeps running minimised":"");updSrcStatus(s);
       }catch(e){s.status="capture failed";updSrcStatus(s)}
     }
   });
@@ -1427,7 +1455,9 @@ function removeSource(id){
   buildP();
 }
 function srcById(id){for(var i=0;i<sources.length;i++)if(sources[i].id===id)return sources[i];return null}
-function fSource(r,t){var s=srcById(r.srcId);if(!s||!s.video)return;var v=s.video;if(v.readyState<2||!v.videoWidth)return;drawMediaFill(r,t,v,v.videoWidth,v.videoHeight)}
+function fSource(r,t){var s=srcById(r.srcId);if(!s)return;
+  if(s.kind==="tool"&&s.bridged&&s.canvas&&s.win&&!s.win.closed&&s.canvas.width){try{drawMediaFill(r,t,s.canvas,s.canvas.width,s.canvas.height);return}catch(e){}}
+  if(!s.video)return;var v=s.video;if(v.readyState<2||!v.videoWidth)return;drawMediaFill(r,t,v,v.videoWidth,v.videoHeight)}
 
 // ============ PANEL SECTIONS: projector, scan, sources ============
 var SS='onclick="event.stopPropagation()" onmousedown="event.stopPropagation()"';

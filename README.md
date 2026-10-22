@@ -116,7 +116,7 @@ Every major parameter can be driven by an LFO (Sine, Triangle, Sawtooth, Square,
 ## Good to know
 - **Tab / window capture shows Chrome's sharing bar.** Chrome marks any shared tab with a "sharing this tab" bar and shrinks that tab to fit it; a page can't turn it off. Press **Hide** on the bar, or use the Unlimiter tool route above, which reads the tool's canvas directly and shows no bar or prompt
 - **Same-site rule for tools.** + Tool only works when the tool and MetaMapper are on the same site (both on racemetamo.github.io works; a downloaded copy of MetaMapper doesn't). For anything else, use **+ Tab / window**
-- **Keep feeding windows visible.** Browsers slow down hidden windows, so keep tool windows open and on screen
+- **Tool windows can be minimised.** MetaMapper runs an Unlimiter tool's frames itself and draws its canvas directly, so a tool window keeps going when minimised or covered (the status says *keeps running minimised*). MetaMapper's own window, or its projector window, must stay on screen. Tab / window captures still slow down when the shared window is hidden
 - **Camera scanning** works best in a dim space with the camera roughly facing the wall. Expect to tune Threshold and Blur on site
 - **Pop-ups** must be allowed for the projector and tool windows
 - Live sources and videos aren't saved in JSON files; re-add them after reloading
