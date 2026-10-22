@@ -436,7 +436,7 @@ function setMod(i,param,key,val){
   var g=regs[i].group;
   if(g){for(var j=0;j<regs.length;j++){if(j!==i&&regs[j].group===g&&regs[j].mods[param])regs[j].mods[param][key]=val}}
 }
-function setFill(i,v){setP(i,"fill",v)}
+function setFill(i,v){setP(i,"fill",v);buildP()}
 function setEdge(i,v){setP(i,"edge",v)}
 
 // Per-region image loading
@@ -1353,9 +1353,18 @@ function addSource(kind,name,stream,extra){
   if(stream)stream.getVideoTracks().forEach(function(t){t.addEventListener("ended",function(){s.ended=true;s.status="ended";buildP()})});
   sources.push(s);srcOpenP=true;buildP();return s;
 }
+// Tab / window capture. Chrome always marks a shared tab with its own "sharing this tab" bar (a page
+// can't turn that off); these options at least keep MetaMapper out of the picker and stop Chrome
+// jumping to the shared tab when sharing starts.
+function captureDisplay(){
+  var o={video:{frameRate:30},audio:false,selfBrowserSurface:"exclude",surfaceSwitching:"include"};
+  try{if(window.CaptureController){var cc=new CaptureController();o.controller=cc;
+    return navigator.mediaDevices.getDisplayMedia(o).then(function(st){try{cc.setFocusBehavior("no-focus-change")}catch(e){}return st})}}catch(e){}
+  return navigator.mediaDevices.getDisplayMedia(o);
+}
 function addTabSource(){
   if(!navigator.mediaDevices||!navigator.mediaDevices.getDisplayMedia){alert("Tab / window capture isn't supported in this browser");return}
-  navigator.mediaDevices.getDisplayMedia({video:{frameRate:30},audio:false}).then(function(st){var t=st.getVideoTracks()[0];addSource("tab",(t&&t.label)||"Captured tab",st)}).catch(function(){});
+  captureDisplay().then(function(st){var t=st.getVideoTracks()[0];addSource("tab",(t&&t.label)||"Captured tab",st)}).catch(function(){});
 }
 function addCamSource(){
   navigator.mediaDevices.getUserMedia({video:{width:{ideal:1280},height:{ideal:720}},audio:false}).then(function(st){var t=st.getVideoTracks()[0];addSource("camera",(t&&t.label)||"Camera",st)}).catch(function(e){alert("Camera unavailable: "+e.message)});
@@ -1370,7 +1379,25 @@ function addToolSource(url){
   var nm=url.split("?")[0].split("/").filter(Boolean).pop()||url;
   addSource("tool",nm.replace(/\.html?$/i,"")||"Tool",null,{win:w,url:url,status:"loading…"});
 }
-function updSrcStatus(s){var el=document.getElementById("srcst_"+s.id);if(el)el.textContent=s.status}
+var SUITE_TOOLS=[["manifold.html","Manifold"],["lattice.html","Lattice"],["ouroboros.html","Ouroboros"],["flow-weave.html","Flow Weave"],
+  ["melted-world.html","Melted World"],["sediment.html","Sediment"],["anchor.html","Anchor"],["relief.html","Relief"],
+  ["flow-field-plotter.html","Flow Field Plotter"],["time-cube.html","Time Cube"],["tbg-facade.html","TBG Facade"],["worldseed.html","Worldseed"],["galaxy.html","Galaxy"]];
+// the address box may hold a whole page or just the folder the suite lives in
+function toolBase(){var u=(toolURL||"").trim();if(!u)return"../Unlimiter/";if(/\.html?(\?|#|$)/i.test(u))return u.replace(/[^\/]*$/,"");return u.replace(/\/?$/,"/")}
+function openSuiteTool(file){var nm=null;for(var i=0;i<SUITE_TOOLS.length;i++)if(SUITE_TOOLS[i][0]===file)nm=SUITE_TOOLS[i][1];
+  var url=toolBase()+file,w=window.open(url,"mm_tool_"+(srcSeq+1),"width=1280,height=760");
+  if(!w){alert("Pop-up blocked — allow pop-ups for this page");return null}
+  return addSource("tool",nm||file,null,{win:w,url:url,status:"loading…"})}
+// a region's Source menu can add a source and use it in one go
+function pickSource(i,v){
+  if(v.indexOf("+tool:")===0){var s=openSuiteTool(v.slice(6));if(s)setP(i,"srcId",s.id);buildP();return}
+  if(v==="+cam"){navigator.mediaDevices.getUserMedia({video:{width:{ideal:1280},height:{ideal:720}},audio:false}).then(function(st){var t=st.getVideoTracks()[0];var s=addSource("camera",(t&&t.label)||"Camera",st);setP(i,"srcId",s.id);buildP()}).catch(function(e){alert("Camera unavailable: "+e.message);buildP()});return}
+  if(v==="+tab"){if(!navigator.mediaDevices||!navigator.mediaDevices.getDisplayMedia){alert("Tab / window capture isn't supported in this browser");return}
+    captureDisplay().then(function(st){var t=st.getVideoTracks()[0];var s=addSource("tab",(t&&t.label)||"Captured tab",st);setP(i,"srcId",s.id);buildP()}).catch(function(){buildP()});return}
+  setP(i,"srcId",v);buildP();
+}
+function updSrcStatus(s){var el=document.getElementById("srcst_"+s.id);if(el)el.textContent=s.status;
+  document.querySelectorAll('[data-srcst="'+s.id+'"]').forEach(function(e){e.textContent=s.status||"";e.style.color=/^live/.test(s.status||"")?"#8f8":"#f9a"})}
 function pollToolSources(){
   sources.forEach(function(s){
     if(s.kind!=="tool")return;
@@ -1455,6 +1482,8 @@ function sectionSources(){
   if(srcOpenP){
     h+='<div class="rw"><button class="btn-sm" onclick="event.stopPropagation();addTabSource()">+ Tab / window</button><button class="btn-sm" onclick="event.stopPropagation();addCamSource()">+ Camera</button></div>';
     h+='<div class="rw"><input id="toolUrl" type=text value="'+esc(toolURL)+'" style="width:150px;background:#222;color:#bbb;border:1px solid #444;font-size:9px;padding:1px 3px" onclick="event.stopPropagation()"><button class="btn-sm" onclick="event.stopPropagation();addToolSource(document.getElementById(\'toolUrl\').value)">+ Tool</button></div>';
+    h+='<div class="rw"><select '+SS+' onchange="if(this.value)openSuiteTool(this.value)"><option value="">+ Unlimiter tool\u2026</option>';SUITE_TOOLS.forEach(function(t){h+=opt(t[0],'',t[1])});h+='</select></div>';
+    h+=hint('Tab / window capture makes Chrome show a sharing bar on the shared tab (it shrinks that tab; press Hide). Unlimiter tools opened from the list below avoid it entirely.','#9ab');
     h+=hint('+ Tool opens an Unlimiter page in its own window and pipes its canvas in live — tweak it in that window. Needs the same site as MetaMapper (e.g. both on racemetamo.github.io). For anything else use + Tab / window.');
     sources.forEach(function(s){
       var ic=s.kind==="tool"?"◈":s.kind==="camera"?"◉":"▣";
@@ -1561,10 +1590,17 @@ function buildP(){
         h+='<div class="rw"><label style="font-size:8px;color:#666">Video not saved in JSON — reload per session</label></div>';
       }
       if(r.fill==="source"){
-        h+='<div class="rw"><label>Source</label><select '+SS+' onchange="setP('+i+',\'srcId\',this.value)"><option value="">\u2014 pick \u2014</option>';
-        sources.forEach(function(sv){h+=opt(sv.id,r.srcId,esc(sv.name))});
+        h+='<div class="rw"><label>Source</label><select '+SS+' onchange="pickSource('+i+',this.value)"><option value="">\u2014 pick \u2014</option>';
+        if(sources.length){h+='<optgroup label="Live sources">';sources.forEach(function(sv){h+=opt(sv.id,r.srcId,esc(sv.name))});h+='</optgroup>'}
+        h+='<optgroup label="Open an Unlimiter tool (no sharing bar)">';SUITE_TOOLS.forEach(function(t){h+=opt('+tool:'+t[0],'',t[1])});h+='</optgroup>';
+        h+='<optgroup label="Add and use">'+opt('+cam','','Camera…')+opt('+tab','','Tab / window…')+'</optgroup>';
         h+='</select></div>';
-        if(!sources.length)h+=hint('Add one in LIVE SOURCES first (Unlimiter tool, tab/window or camera).','#f9a');
+        var cs=srcById(r.srcId);
+        if(cs){h+='<div class="rw"><label style="font-size:8px;color:#777">Status</label><span data-srcst="'+cs.id+'" style="font-size:9px;color:'+(/^live/.test(cs.status||"")?'#8f8':'#f9a')+'">'+esc(cs.status||"")+'</span></div>';
+          if(cs.kind==="tab")h+=hint('Chrome puts a \u201csharing this tab\u201d bar on the shared tab and shrinks it to fit \u2014 press Hide on the bar. For Unlimiter tools, open them from this menu instead: no bar, no prompt.','#9ab');
+          if(cs.status==="blocked (other site)")h+=hint('The browser won\'t let MetaMapper read this tool window: they have to come from the same site (both on racemetamo.github.io, or both from one local server). Opened as files, use Tab / window instead.','#f9a');}
+        else if(r.srcId)h+=hint('That source is gone (sources don\'t survive a reload) \u2014 pick it again.','#f9a');
+        else h+=hint('Pick a live source, or add one here: a camera, a tab or window, or an Unlimiter tool (opens in its own window from the address set in LIVE SOURCES).');
         h+='<div class="rw"><label>Fit</label><select '+SS+' onchange="setP('+i+',\'vidFit\',this.value)">'+opt('cover',r.vidFit,'Cover')+opt('contain',r.vidFit,'Contain')+opt('tile',r.vidFit,'Tile')+'</select></div>';
         h+='<div class="rw"><label>Pos X</label><input type=range min=0 max=1 step=0.01 value='+r.vidOffsetX+' oninput="setP('+i+',\'vidOffsetX\',+this.value)"></div>';
         h+='<div class="rw"><label>Pos Y</label><input type=range min=0 max=1 step=0.01 value='+r.vidOffsetY+' oninput="setP('+i+',\'vidOffsetY\',+this.value)"></div>';

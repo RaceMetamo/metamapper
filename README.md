@@ -107,13 +107,14 @@ Every major parameter can be driven by an LFO (Sine, Triangle, Sawtooth, Square,
 4. Switch to ANIMATE and turn on **MAP** to fine-tune with content running
 
 ### Use an Unlimiter tool as a layer
-1. Open **Sources** → enter the tool's address → **+ Tool**
-2. Set a region's Fill to **Source** and pick it
-3. Adjust the tool in its own window; the region updates live
+1. Set a region's Fill to **Source**, open the Source menu and pick the tool under *Open an Unlimiter tool* — it opens in its own window and the region uses it straight away (or add it first from **Sources → + Unlimiter tool**)
+2. Adjust the tool in its own window; the region updates live
+3. The address box in **Sources** says where the tools live — a folder (default `../Unlimiter/`) or one page
 
 ---
 
 ## Good to know
+- **Tab / window capture shows Chrome's sharing bar.** Chrome marks any shared tab with a "sharing this tab" bar and shrinks that tab to fit it; a page can't turn it off. Press **Hide** on the bar, or use the Unlimiter tool route above, which reads the tool's canvas directly and shows no bar or prompt
 - **Same-site rule for tools.** + Tool only works when the tool and MetaMapper are on the same site (both on racemetamo.github.io works; a downloaded copy of MetaMapper doesn't). For anything else, use **+ Tab / window**
 - **Keep feeding windows visible.** Browsers slow down hidden windows, so keep tool windows open and on screen
 - **Camera scanning** works best in a dim space with the camera roughly facing the wall. Expect to tune Threshold and Blur on site
