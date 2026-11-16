@@ -66,6 +66,7 @@ canvas{position:absolute;top:0;left:0;width:100%;height:100%}
 <button class="on" onclick="toggleMode(this)">EDIT</button>
 <button onclick="addReg()">+ Region</button>
 <button onclick="addSpline()">+ Spline</button>
+<button onclick="shapeOpenP=true;buildP();var pn=document.getElementById('pnl');pn.classList.remove('hide');pn.scrollTop=0" title="Rectangle, rounded, ellipse, polygon, star and concentric ring tools">Shapes</button>
 <button onclick="undoPt()">Undo Pt</button>
 <button onclick="closeShape()">Close</button>
 <button onclick="reopenShape()">Reopen</button>
@@ -257,6 +258,11 @@ Each post-FX parameter has its own LFO/Audio modulation under "▸ POST FX LFO".
 <h3>LFO / Audio Modulation</h3>
 <p>Each parameter can be modulated by a waveform: Sine, Triangle, Sawtooth, Square, Noise, or live audio bands (Bass, Mid, High). Set <b>Rate</b> for speed and <b>Depth</b> for modulation amount. The LFO oscillates around the base slider value.</p>
 
+<h2>SHAPES &amp; CURVES</h2>
+<p><kbd>Shapes</kbd> opens the shape tools: Rect, Rounded, Ellipse, Polygon and Star. Pick one and drag on the canvas or on the projector window (<kbd>Shift</kbd> keeps it square / circular; a single click drops a default size; <kbd>Esc</kbd> or right-click cancels). <b>Rings</b> makes concentric copies with equal spacing down to <b>Inner size</b>, each its own region, outermost at the bottom. <b>Outline only</b> makes spline loops (edge and text effects, no fill). <b>Group rings</b> links them so they share effect settings.<br>
+<b>Curves:</b> double-click a point (or select it and press <kbd>B</kbd>) to toggle it between a sharp corner and a smooth curve, then drag its blue handles. Handles stay mirrored; hold <kbd>Alt</kbd> while dragging to break them for a cusp. <kbd>Smooth all</kbd> / <kbd>Sharpen all</kbd> in the region panel converts the whole shape.<br>
+<b>Editing:</b> click an outline to add a point exactly on the curve (<kbd>Shift</kbd>+click for splines). Drag inside a shape to move it. With no point ringed, arrows move the whole shape, <kbd>[</kbd> <kbd>]</kbd> scale it and <kbd>Shift</kbd>+<kbd>[</kbd> <kbd>]</kbd> rotate it; the region panel also has scale, rotate and flip buttons. <kbd>Esc</kbd> clears the point selection.</p>
+
 <h2>ON-SITE MAPPING (PROJECTOR WINDOW)</h2>
 <p><kbd>📽 Projector</kbd> opens a second window for the projector (in Chrome it can jump straight to the second display). Double-click it or press <kbd>F</kbd> for fullscreen.<br>
 In <b>Edit</b> mode the projector shows your shapes as flat colours with outlines and labels, so you can see exactly where each point lands on the wall. Drag points on either screen. The yellow crosshair shows where your mouse is on the projector.<br>
@@ -286,133 +292,6 @@ Sources are live only — re-add them after reloading the page.</p>
 <p style="color:#555;margin-top:20px;font-size:10px">MetaMapper by Metamo Industries — <a href="#" onclick="document.getElementById('help').style.display='none';document.getElementById('about').style.display='flex'" style="color:#555">About</a></p>
 </div></div>
 
-<script>
-/* ============================================================
-   unlimiter-camera.js — choose which camera the suite uses
-
-   Every tool asks the browser for "a camera", and the browser hands back
-   its default, usually a laptop's built-in one. Load this file first and
-   every camera request in the page uses the camera you picked instead, and
-   the choice is remembered for every tool on the same site (one choice for
-   the whole suite, MetaMapper included when it is served alongside).
-
-     <script src="unlimiter-camera.js"><\/script>
-     UnlimiterCamera.mount(container)   // a "Camera" menu, appended to container
-
-   Picking another camera while one is running swaps it in place: the
-   running stream gets the new camera's track, so the tool keeps going
-   without being restarted.
-   ============================================================ */
-(function(global){
-"use strict";
-const KEY = "unlimiter.camera.device";
-const md = global.navigator && global.navigator.mediaDevices;
-const stub = { mount(){ return null; }, choose(){}, current(){ return ""; }, list(){ return Promise.resolve([]); } };
-if(!md || !md.getUserMedia){ global.UnlimiterCamera = stub; return; }
-if(global.UnlimiterCamera && global.UnlimiterCamera.__real) return;   // loaded twice
-
-const orig = md.getUserMedia.bind(md);
-const live = [];                                  // streams handed out: { stream, c }
-const menus = new Set();
-let devices = [];
-
-function saved(){ try{ return localStorage.getItem(KEY) || ""; }catch(e){ return ""; } }
-function save(id){ try{ if(id) localStorage.setItem(KEY, id); else localStorage.removeItem(KEY); }catch(e){} }
-function withDevice(c, id){
-  if(!c || !c.video || !id) return c;
-  const v = c.video === true ? {} : Object.assign({}, c.video);
-  if(v.deviceId || v.facingMode) return c;        // the page asked for something specific itself
-  v.deviceId = { exact: id };
-  return Object.assign({}, c, { video: v });
-}
-/* every camera request in the page goes through here */
-md.getUserMedia = async function(c){
-  const id = saved();
-  let st;
-  if(c && c.video && id){
-    try{ st = await orig(withDevice(c, id)); }
-    catch(e){
-      // that camera is unplugged (or can't do what was asked): fall back to the default
-      if(e && /Overconstrained|NotFound|NotReadable/.test(e.name)) st = await orig(c);
-      else throw e;
-    }
-  } else st = await orig(c);
-  if(c && c.video){ live.push({ stream: st, c }); refresh(); }
-  return st;
-};
-
-async function list(){
-  try{ devices = (await md.enumerateDevices()).filter(d => d.kind === "videoinput"); }catch(e){ devices = []; }
-  return devices;
-}
-function inUse(){
-  for(let i = live.length - 1; i >= 0; i--){
-    const t = live[i].stream.getVideoTracks().find(t => t.readyState === "live");
-    if(t && t.getSettings) return t.getSettings().deviceId || "";
-  }
-  return "";
-}
-/* pick a camera; running streams swap to it in place */
-async function choose(id){
-  save(id);
-  for(const e of live){
-    const old = e.stream.getVideoTracks().filter(t => t.readyState === "live");
-    if(!old.length) continue;
-    try{
-      const ns = await orig(id ? withDevice(e.c, id) : e.c);
-      const nt = ns.getVideoTracks()[0]; if(!nt) continue;
-      old.forEach(t => { t.stop(); e.stream.removeTrack(t); });
-      e.stream.addTrack(nt);
-      // video elements showing this stream pick up the new track
-      document.querySelectorAll("video").forEach(v => { if(v.srcObject === e.stream){ v.srcObject = null; v.srcObject = e.stream; v.play().catch(() => {}); } });
-    }catch(err){ console.warn("[camera] couldn't switch:", err && err.name); }
-  }
-  try{ global.dispatchEvent(new CustomEvent("unlimiter-camera", { detail: { deviceId: id } })); }catch(e){}
-  refresh();
-}
-async function refresh(){
-  await list();
-  menus.forEach(fill);
-}
-function fill(sel){
-  if(!sel.isConnected){ menus.delete(sel); return; }
-  const want = saved(), using = inUse();
-  sel.innerHTML = "";
-  const add = (v, t, dis) => { const o = document.createElement("option"); o.value = v; o.textContent = t; if(dis) o.disabled = true; sel.appendChild(o); };
-  add("", "Default camera");
-  let unnamed = false;
-  devices.forEach((d, i) => {
-    if(!d.label) unnamed = true;
-    add(d.deviceId, (d.label || ("Camera " + (i + 1))) + (d.deviceId && d.deviceId === using ? "  ●" : ""));
-  });
-  if(unnamed) add("-", "(start a camera once to see their names)", true);
-  sel.value = devices.some(d => d.deviceId === want) ? want : "";
-  sel.title = "Which camera this tool (and the rest of the suite) uses. ● marks the one running now.";
-}
-/* a Camera menu, appended to `container` */
-function mount(container, opts){
-  if(!container) return null;
-  opts = opts || {};
-  const sel = document.createElement("select");
-  sel.className = "ucam-select";
-  sel.setAttribute("aria-label", "Camera");
-  sel.style.cssText = opts.style || "flex:1 1 120px;min-width:0;max-width:100%;width:auto";
-  sel.addEventListener("click", e => e.stopPropagation());
-  sel.addEventListener("mousedown", e => e.stopPropagation());
-  sel.addEventListener("change", () => { if(sel.value !== "-") choose(sel.value); });
-  sel.addEventListener("focus", () => list().then(() => fill(sel)));
-  container.appendChild(sel);
-  menus.add(sel);
-  list().then(() => fill(sel));
-  return sel;
-}
-if(md.addEventListener) md.addEventListener("devicechange", refresh);
-
-global.UnlimiterCamera = { __real: true, mount, choose, list, current: saved, inUse };
-if(typeof module !== "undefined" && module.exports) module.exports = global.UnlimiterCamera;
-})(typeof window !== "undefined" ? window : globalThis);
-
-</script>
 <script>
 var W=960,H=540,c=document.getElementById("c"),dctx=c.getContext("2d");
 // Program canvas: all content renders here. Screen, recording and projector each take a copy.
@@ -492,7 +371,7 @@ function hs(h,s,l){return"hsl("+((h%360+360)%360)+","+Math.round(s*100)+"%,"+Mat
 function palCol(idx,l){var c=palette[idx%palette.length];var r=parseInt(c.slice(1,3),16),g=parseInt(c.slice(3,5),16),b=parseInt(c.slice(5,7),16);return"rgba("+Math.round(r*l)+","+Math.round(g*l)+","+Math.round(b*l)+",1)"}
 
 // Region
-function mkReg(lbl){var i=regs.length;return{label:lbl||"Region "+(i+1),color:COLS[i%COLS.length],poly:[],closed:false,
+function mkReg(lbl){var i=regs.length;return{label:lbl||"Region "+(i+1),color:COLS[i%COLS.length],poly:[],hnd:[],closed:false,
   fill:"noise",fillHue:200+i*30,fillSpeed:1,fillInt:0.6,
   edge:"pulse",edgeHue:180+i*25,edgeSpeed:1.5,edgeWidth:3,edgeInt:0.9,
   blend:"source-over",opacity:1,scale:1,angle:0,phase:0,contrast:1,mute:false,solo:false,group:"",
@@ -563,7 +442,7 @@ function setMod(i,param,key,val){
   var g=regs[i].group;
   if(g){for(var j=0;j<regs.length;j++){if(j!==i&&regs[j].group===g&&regs[j].mods[param])regs[j].mods[param][key]=val}}
 }
-function setFill(i,v){setP(i,"fill",v);buildP()}
+function setFill(i,v){setP(i,"fill",v)}
 function setEdge(i,v){setP(i,"edge",v)}
 
 // Per-region image loading
@@ -671,29 +550,69 @@ function onPtrDown(e,el){
     return;
   }
   if(!vertsEditable())return;
+  if(shapeTool){shapeDrag={x0:p[0],y0:p[1],x1:p[0],y1:p[1],square:shp.square||e.shiftKey};return}
   if(!regs.length){if(mode!=="edit")return;addReg()}
   var r=regs[active];if(!r)return;
+  var hh=nearHandle(r,p[0],p[1],th);
+  if(hh){dragH=hh;selVtx=hh.i;saveUndo();return}
   var vi=nearVtx(r.poly,p[0],p[1],th);
   if(vi<0){ // grabbing a point on another shape makes that shape active
     for(var k=regs.length-1;k>=0;k--){if(k===active)continue;var v2=nearVtx(regs[k].poly,p[0],p[1],th);if(v2>=0){active=k;r=regs[k];vi=v2;buildP();break}}
   }
   if(vi>=0){dragIdx=vi;selVtx=vi;isDragging=true;saveUndo();return}
-  if(mode==="edit"&&!r.closed){saveUndo();r.poly.push(p);selVtx=r.poly.length-1;document.getElementById("info").textContent=r.label+": "+r.poly.length+" pts";buildP()}
+  // Click on the outline of a finished shape (or Shift+click on any outline) adds a point there
+  if(r.poly.length>=2&&(isClosedPath(r)||e.shiftKey)){
+    var sg=nearSeg(r,p[0],p[1]);
+    if(sg.i>=0&&sg.d<th*0.8){saveUndo();selVtx=insertOnSeg(r,sg.i,sg.t);dragIdx=selVtx;isDragging=true;document.getElementById("info").textContent=r.label+": added point "+selVtx;buildP();return}
+  }
+  if(mode==="edit"&&!r.closed){saveUndo();r.poly.push(p);syncH(r);selVtx=r.poly.length-1;document.getElementById("info").textContent=r.label+": "+r.poly.length+" pts";buildP();return}
+  // Drag inside a closed shape to move it (the active one first, then the topmost under the cursor)
+  var tgt=-1;
+  if(isClosedPath(r)&&insidePoly(geo(r),p[0],p[1]))tgt=active;
+  else for(var k=regs.length-1;k>=0;k--){var q=regs[k];if(isClosedPath(q)&&q.type!=="spline"&&insidePoly(geo(q),p[0],p[1])){tgt=k;break}}
+  if(tgt>=0){
+    if(tgt!==active){active=tgt;selVtx=-1;buildP()}
+    var rr=regs[active];syncH(rr);
+    moveDrag={x:p[0],y:p[1],poly0:rr.poly.map(function(v){return[v[0],v[1]]}),hnd0:rr.hnd.map(function(h){return h?h.slice():null}),saved:false};
+  }else if(selVtx>=0){selVtx=-1;buildP()}
 }
 function onPtrMove(e,el){
   var p=canvasXY(e,el);cursorN=p;
   if(calDrag>=0){scan.quad[calDrag]=[Math.max(0,Math.min(1,p[0])),Math.max(0,Math.min(1,p[1]))];scan.dirty=true;return}
-  if(isDragging&&dragIdx>=0){var r=regs[active];if(r)r.poly[dragIdx]=p}
+  if(shapeDrag){shapeDrag.x1=p[0];shapeDrag.y1=p[1];shapeDrag.square=shp.square||e.shiftKey;return}
+  var r=regs[active];
+  if(dragH&&r&&r.hnd&&r.hnd[dragH.i]){
+    var h=r.hnd[dragH.i],a=r.poly[dragH.i],sd=dragH.side,o=1-sd;h[sd*2]=p[0];h[sd*2+1]=p[1];
+    if(!e.altKey){var ol=Math.hypot((h[o*2]-a[0])*W,(h[o*2+1]-a[1])*H),dx=(a[0]-p[0])*W,dy=(a[1]-p[1])*H,dl=Math.hypot(dx,dy);if(dl>0.5&&ol>0.01){h[o*2]=a[0]+dx/dl*ol/W;h[o*2+1]=a[1]+dy/dl*ol/H}else if(dl>0.5){h[o*2]=a[0]+dx/W;h[o*2+1]=a[1]+dy/H}}
+    return;
+  }
+  if(moveDrag&&r){
+    var dx=p[0]-moveDrag.x,dy=p[1]-moveDrag.y;
+    if(!moveDrag.saved){if(Math.hypot(dx*W,dy*H)<2)return;saveUndo();moveDrag.saved=true}
+    for(var i=0;i<r.poly.length&&i<moveDrag.poly0.length;i++){var q=moveDrag.poly0[i],h0=moveDrag.hnd0[i];r.poly[i]=[+(q[0]+dx).toFixed(5),+(q[1]+dy).toFixed(5)];r.hnd[i]=h0?[h0[0]+dx,h0[1]+dy,h0[2]+dx,h0[3]+dy]:null}
+    return;
+  }
+  if(isDragging&&dragIdx>=0&&r&&dragIdx<r.poly.length)moveVtx(r,dragIdx,p[0],p[1]);
 }
 function onPtrUp(){
   if(calDrag>=0){calDrag=-1;scan.calibrated=true;saveScanCal();buildP();return}
+  if(shapeDrag){commitShape();return}
+  if(dragH){dragH=null;buildP();return}
+  if(moveDrag){moveDrag=null;buildP();return}
   if(isDragging){isDragging=false;dragIdx=-1;buildP()}
 }
 function onPtrMenu(e,el){
   e.preventDefault();if(!vertsEditable())return;
+  if(shapeTool){setShapeTool(null);return}
   var r=regs[active];if(!r||r.poly.length<1)return;
   var p=canvasXY(e,el),vi=nearVtx(r.poly,p[0],p[1],hitPx(el)*1.25);
-  if(vi>=0){saveUndo();r.poly.splice(vi,1);if(r.poly.length<3)r.closed=false;selVtx=-1;buildP();document.getElementById("info").textContent="Deleted vertex "+vi}
+  if(vi>=0){saveUndo();delVtx(r,vi);selVtx=-1;buildP();document.getElementById("info").textContent="Deleted vertex "+vi}
+}
+// Double-click a point: toggle sharp corner / smooth curve. Returns true if it hit a point.
+function onDbl(e,el){
+  if(!vertsEditable()||shapeTool)return false;var r=regs[active];if(!r)return false;
+  var p=canvasXY(e,el),vi=nearVtx(r.poly,p[0],p[1],hitPx(el)*1.25);
+  if(vi>=0){toggleSmooth(vi);return true}return false;
 }
 function wirePointer(el,win){
   el.addEventListener("mousedown",function(e){onPtrDown(e,el)});
@@ -701,6 +620,7 @@ function wirePointer(el,win){
   el.addEventListener("mouseleave",function(){cursorN=null});
   el.addEventListener("contextmenu",function(e){onPtrMenu(e,el)});
   (win||window).addEventListener("mouseup",onPtrUp);
+  if(!win)el.addEventListener("dblclick",function(e){onDbl(e,el)});
 }
 wirePointer(c);
 
@@ -715,11 +635,20 @@ function onKey(e){
     var dx=k==="ArrowLeft"?-st:k==="ArrowRight"?st:0,dy=k==="ArrowUp"?-st:k==="ArrowDown"?st:0;
     var nowT=performance.now();if(nowT-lastNudge>700)saveUndo();lastNudge=nowT;
     var v=r.poly[selVtx];
-    r.poly[selVtx]=[+Math.max(0,Math.min(1,v[0]+dx/W)).toFixed(5),+Math.max(0,Math.min(1,v[1]+dy/H)).toFixed(5)];
+    moveVtx(r,selVtx,+Math.max(0,Math.min(1,v[0]+dx/W)).toFixed(5),+Math.max(0,Math.min(1,v[1]+dy/H)).toFixed(5));
     return;
   }
+  if(k==="Escape"){if(shapeTool||shapeDrag){shapeDrag=null;setShapeTool(null)}else if(selVtx>=0){selVtx=-1;buildP()}return}
+  var shapeKeys=!!(r&&r.poly.length&&selVtx<0&&vertsEditable()&&!e.ctrlKey&&!e.metaKey);
+  if(k.indexOf("Arrow")===0&&shapeKeys){
+    e.preventDefault();var st2=(e.shiftKey?10:1)*(e.altKey?0.25:1);
+    shapeXform(1,0,k==="ArrowLeft"?-st2:k==="ArrowRight"?st2:0,k==="ArrowUp"?-st2:k==="ArrowDown"?st2:0);return;
+  }
+  if(shapeKeys&&(k==="["||k==="]")){e.preventDefault();shapeXform(k==="]"?1.02:1/1.02,0,0,0);return}
+  if(shapeKeys&&(k==="{"||k==="}")){e.preventDefault();shapeXform(1,(k==="}"?1:-1)*Math.PI/180,0,0);return}
+  if((k==="b"||k==="B")&&hasSel&&!e.ctrlKey&&!e.metaKey){toggleSmooth(selVtx);return}
   if(k==="Tab"&&r&&r.poly.length&&vertsEditable()){e.preventDefault();selVtx=((selVtx<0?0:selVtx)+(e.shiftKey?-1:1)+r.poly.length)%r.poly.length;return}
-  if(k==="Delete"&&hasSel){saveUndo();r.poly.splice(selVtx,1);if(r.poly.length<3)r.closed=false;selVtx=-1;buildP();return}
+  if((k==="Delete"||k==="Backspace")&&hasSel){e.preventDefault();saveUndo();delVtx(r,selVtx);selVtx=-1;buildP();return}
   if(e.ctrlKey||e.metaKey||e.altKey)return;
   if(k==="g"||k==="G"){showGrid=!showGrid;buildP()}
   else if(k==="c"||k==="C"){showCursor=!showCursor;buildP()}
@@ -742,7 +671,7 @@ function openOutput(){
   outCv=d.getElementById("o");outCv.width=W;outCv.height=H;outCtx=outCv.getContext("2d");
   wirePointer(outCv,outWin);
   outWin.addEventListener("keydown",function(e){if(e.key==="f"||e.key==="F"){toggleOutFS();return}onKey(e)});
-  outCv.addEventListener("dblclick",toggleOutFS);
+  outCv.addEventListener("dblclick",function(e){if(!onDbl(e,outCv))toggleOutFS()});
   outWin.addEventListener("beforeunload",function(){outCtx=null;outCv=null;setTimeout(function(){buildP();schedule()},60)});
   setTimeout(function(){try{var hh=d.getElementById("h");if(hh)hh.style.opacity="0"}catch(e){}},7000);
   projOpen=true;placeOnSecondScreen();buildP();schedule();
@@ -777,13 +706,13 @@ function drawOverlay(g,o){
   var sf=W/960;g.save();g.globalAlpha=1;g.globalCompositeOperation="source-over";
   if(o.grid)drawGrid(g);
   if(o.fill){
-    for(var i=0;i<regs.length;i++){var r=regs[i];if(r.type==="spline"||!r.closed||r.poly.length<3||r.mute)continue;g.fillStyle=r.color;g.globalAlpha=i===active?0.55:0.3;pp2(g,r.poly,true);g.fill()}
+    for(var i=0;i<regs.length;i++){var r=regs[i];if(r.type==="spline"||!r.closed||r.poly.length<3||r.mute)continue;g.fillStyle=r.color;g.globalAlpha=i===active?0.55:0.3;pp2(g,geo(r),true);g.fill()}
     g.globalAlpha=1;
   }
   if(o.outlines){
     for(var i=0;i<regs.length;i++){
       var r=regs[i],act=i===active;if(r.poly.length<1)continue;
-      g.strokeStyle=act?"#fff":r.color;g.lineWidth=(act?3:2)*sf;pp2(g,r.poly,r.closed&&r.type!=="spline");g.stroke();
+      g.strokeStyle=act?"#fff":r.color;g.lineWidth=(act?3:2)*sf;pp2(g,geo(r),isClosedPath(r));g.stroke();if(act)drawHandles(g,r);
       for(var j=0;j<r.poly.length;j++){
         var x=r.poly[j][0]*W,y=r.poly[j][1]*H;
         g.fillStyle=act?"#fff":r.color;g.beginPath();g.arc(x,y,(act?5:3.5)*sf,0,Math.PI*2);g.fill();
@@ -796,6 +725,7 @@ function drawOverlay(g,o){
       }
     }
   }
+  drawShapePreview(g);
   if(o.cursor&&cursorN){
     var cx=cursorN[0]*W,cy=cursorN[1]*H;
     g.strokeStyle="#ff0";g.lineWidth=1.5*sf;g.globalAlpha=0.55;g.beginPath();g.moveTo(0,cy);g.lineTo(W,cy);g.moveTo(cx,0);g.lineTo(cx,H);g.stroke();
@@ -829,12 +759,197 @@ function renderOutput(){
   }
 }
 
+// ============ CURVES (bezier handles) + SHAPE TOOLS ============
+// Each region keeps its anchor points in r.poly. r.hnd[i] is null (sharp corner) or
+// [inX,inY,outX,outY] in the same 0-1 space. geo(r) returns the flattened outline every
+// renderer, effect and export uses, so curves behave exactly like dense polygons downstream.
+var flatCache=new WeakMap();
+function syncH(r){if(!r.hnd)r.hnd=[];while(r.hnd.length<r.poly.length)r.hnd.push(null);if(r.hnd.length>r.poly.length)r.hnd.length=r.poly.length;return r.hnd}
+function hasCurves(r){if(!r.hnd)return false;for(var i=0;i<r.hnd.length&&i<r.poly.length;i++)if(r.hnd[i])return true;return false}
+function isClosedPath(r){return !!r.closed&&r.poly.length>=3}
+function geo(r){
+  var p=r.poly;if(p.length<2||!hasCurves(r))return p;
+  syncH(r);
+  var cl=isClosedPath(r),n=p.length,sig=n*7+(cl?1:0);
+  for(var i=0;i<n;i++){sig=sig*1.000037+p[i][0]*13.17+p[i][1]*7.73;var h=r.hnd[i];if(h)sig+=h[0]*3.31+h[1]*5.13+h[2]*2.93+h[3]*1.71+i*0.013}
+  var c=flatCache.get(r);if(c&&c.sig===sig&&c.n===n&&c.W===W)return c.flat;
+  var out=[],segs=cl?n:n-1;
+  for(var i=0;i<segs;i++){
+    var j=(i+1)%n,a=p[i],b=p[j],ha=r.hnd[i],hb=r.hnd[j];
+    out.push([a[0],a[1]]);
+    if(!ha&&!hb)continue;
+    var c1=ha?[ha[2],ha[3]]:a,c2=hb?[hb[0],hb[1]]:b;
+    var L=Math.hypot((c1[0]-a[0])*W,(c1[1]-a[1])*H)+Math.hypot((c2[0]-c1[0])*W,(c2[1]-c1[1])*H)+Math.hypot((b[0]-c2[0])*W,(b[1]-c2[1])*H);
+    var k=Math.max(4,Math.min(64,Math.ceil(L/6)));
+    for(var s=1;s<k;s++){var t=s/k,u=1-t,A=u*u*u,B=3*u*u*t,C=3*u*t*t,D=t*t*t;out.push([A*a[0]+B*c1[0]+C*c2[0]+D*b[0],A*a[1]+B*c1[1]+C*c2[1]+D*b[1]])}
+  }
+  if(!cl)out.push([p[n-1][0],p[n-1][1]]);
+  flatCache.set(r,{sig:sig,n:n,W:W,flat:out});return out;
+}
+function moveVtx(r,i,x,y){var o=r.poly[i],dx=x-o[0],dy=y-o[1];r.poly[i]=[x,y];var h=r.hnd&&r.hnd[i];if(h)r.hnd[i]=[h[0]+dx,h[1]+dy,h[2]+dx,h[3]+dy]}
+function delVtx(r,i){syncH(r);r.poly.splice(i,1);r.hnd.splice(i,1);if(r.poly.length<3)r.closed=false}
+// Smooth handles from the neighbouring points (a third of each neighbour distance)
+function autoHandle(r,i){
+  var p=r.poly,n=p.length,cl=isClosedPath(r);if(n<2)return null;
+  var a=p[i],pv=i>0?p[i-1]:(cl?p[n-1]:null),nx=i<n-1?p[i+1]:(cl?p[0]:null);
+  var P=pv||a,N=nx||a,dx=(N[0]-P[0])*W,dy=(N[1]-P[1])*H,dl=Math.hypot(dx,dy)||1;dx/=dl;dy/=dl;
+  var li=pv?Math.hypot((a[0]-pv[0])*W,(a[1]-pv[1])*H)/3:0,lo=nx?Math.hypot((nx[0]-a[0])*W,(nx[1]-a[1])*H)/3:0;
+  return[a[0]-dx*li/W,a[1]-dy*li/H,a[0]+dx*lo/W,a[1]+dy*lo/H];
+}
+function toggleSmooth(i){var r=regs[active];if(!r||i<0||i>=r.poly.length)return;saveUndo();syncH(r);r.hnd[i]=r.hnd[i]?null:autoHandle(r,i);selVtx=i;buildP();document.getElementById("info").textContent="Point "+i+(r.hnd[i]?" curved":" sharp")}
+function smoothAll(on){var r=regs[active];if(!r||!r.poly.length)return;saveUndo();syncH(r);var hs2=[];for(var i=0;i<r.poly.length;i++)hs2.push(on?autoHandle(r,i):null);r.hnd=hs2;buildP()}
+// Move / scale / rotate the whole active shape (handles follow)
+function shapeXform(sc,rot,dx,dy,noUndo){
+  var r=regs[active];if(!r||!r.poly.length)return;
+  if(!noUndo){var nowT=performance.now();if(nowT-lastNudge>700)saveUndo();lastNudge=nowT}
+  syncH(r);var bb=polyBB(r.poly),cx=(bb.x+bb.x1)/2,cy=(bb.y+bb.y1)/2,co=Math.cos(rot),si=Math.sin(rot);
+  function tf(x,y){var px=x*W-cx,py=y*H-cy;return[+((cx+(px*co-py*si)*sc)/W+dx/W).toFixed(5),+((cy+(px*si+py*co)*sc)/H+dy/H).toFixed(5)]}
+  for(var i=0;i<r.poly.length;i++){r.poly[i]=tf(r.poly[i][0],r.poly[i][1]);var h=r.hnd[i];if(h){var a=tf(h[0],h[1]),b=tf(h[2],h[3]);r.hnd[i]=[a[0],a[1],b[0],b[1]]}}
+}
+function flipShape(hz){var r=regs[active];if(!r||!r.poly.length)return;saveUndo();syncH(r);var bb=polyBB(r.poly),c=hz?(bb.x+bb.x1)/2/W:(bb.y+bb.y1)/2/H,k=hz?0:1;
+  for(var i=0;i<r.poly.length;i++){r.poly[i][k]=2*c-r.poly[i][k];var h=r.hnd[i];if(h){h[k]=2*c-h[k];h[k+2]=2*c-h[k+2]}}}
+// Point-in-polygon on the flattened outline
+function insidePoly(p,x,y){var c=false;for(var i=0,j=p.length-1;i<p.length;j=i++){var a=p[i],b=p[j];if(((a[1]>y)!==(b[1]>y))&&(x<(b[0]-a[0])*(y-a[1])/(b[1]-a[1]+1e-12)+a[0]))c=!c}return c}
+// Find the segment of r nearest (x,y): returns {i,t,d} in pixels, t along the (possibly curved) segment
+function nearSeg(r,x,y){
+  var p=r.poly,n=p.length,cl=isClosedPath(r),segs=cl?n:n-1,best={i:-1,t:0,d:1e9};syncH(r);
+  for(var i=0;i<segs;i++){
+    var j=(i+1)%n,a=p[i],b=p[j],ha=r.hnd[i],hb=r.hnd[j];
+    var c1=ha?[ha[2],ha[3]]:a,c2=hb?[hb[0],hb[1]]:b,steps=(ha||hb)?32:1;
+    for(var s=0;s<steps;s++){
+      var t0=s/steps,t1=(s+1)/steps,P0=bz(a,c1,c2,b,t0),P1=bz(a,c1,c2,b,t1);
+      var ex=(P1[0]-P0[0])*W,ey=(P1[1]-P0[1])*H,qx=(x-P0[0])*W,qy=(y-P0[1])*H,l2=ex*ex+ey*ey,u=l2>0?Math.max(0,Math.min(1,(qx*ex+qy*ey)/l2)):0;
+      var dd=Math.hypot(qx-ex*u,qy-ey*u);if(dd<best.d)best={i:i,t:t0+(t1-t0)*u,d:dd};
+    }
+  }
+  return best;
+}
+function bz(a,c1,c2,b,t){var u=1-t,A=u*u*u,B=3*u*u*t,C=3*u*t*t,D=t*t*t;return[A*a[0]+B*c1[0]+C*c2[0]+D*b[0],A*a[1]+B*c1[1]+C*c2[1]+D*b[1]]}
+function lp(a,b,t){return[a[0]+(b[0]-a[0])*t,a[1]+(b[1]-a[1])*t]}
+// Insert a point on segment i at t without changing the shape (de Casteljau split)
+function insertOnSeg(r,i,t){
+  syncH(r);var n=r.poly.length,j=(i+1)%n,a=r.poly[i],b=r.poly[j],ha=r.hnd[i],hb=r.hnd[j],np,nh=null;
+  if(ha||hb){
+    var c1=ha?[ha[2],ha[3]]:a,c2=hb?[hb[0],hb[1]]:b;
+    var p01=lp(a,c1,t),p12=lp(c1,c2,t),p23=lp(c2,b,t),p012=lp(p01,p12,t),p123=lp(p12,p23,t);np=lp(p012,p123,t);
+    r.hnd[i]=[ha?ha[0]:a[0],ha?ha[1]:a[1],p01[0],p01[1]];
+    r.hnd[j]=[p23[0],p23[1],hb?hb[2]:b[0],hb?hb[3]:b[1]];
+    nh=[p012[0],p012[1],p123[0],p123[1]];
+  }else np=lp(a,b,t);
+  np=[+np[0].toFixed(5),+np[1].toFixed(5)];
+  var at=j===0?n:i+1;r.poly.splice(at,0,np);r.hnd.splice(at,0,nh);return at;
+}
+
+// ---- Shape tool ----
+var shapeTool=null,shapeDrag=null,shapeOpenP=true,moveDrag=null,dragH=null;
+var shp={rings:1,inner:0.3,sides:6,starDepth:0.5,round:0.25,ellPts:8,square:false,outline:false,group:false};
+var SHAPES=[["rect","▭ Rect"],["rrect","▢ Rounded"],["ellipse","◯ Ellipse"],["poly","⬡ Polygon"],["star","☆ Star"]];
+var SHAPE_NAME={rect:"Rect",rrect:"Rounded",ellipse:"Ellipse",poly:"Polygon",star:"Star"};
+function setShapeTool(t){shapeTool=shapeTool===t?null:t;shapeDrag=null;if(shapeTool){shapeOpenP=true;selVtx=-1}
+  document.getElementById("info").textContent=shapeTool?SHAPE_NAME[shapeTool]+": drag on the canvas or projector (Shift = square/circle, click = default size, Esc = cancel)":"Shape tool off";buildP()}
+// Build one outline in pixel space inside the box, return {poly,hnd} normalized
+function genShape(kind,x0,y0,x1,y1){
+  var cx=(x0+x1)/2,cy=(y0+y1)/2,rx=Math.abs(x1-x0)/2,ry=Math.abs(y1-y0)/2,P=[],Hd=[],K;
+  function add(x,y,h){P.push([+(x/W).toFixed(5),+(y/H).toFixed(5)]);Hd.push(h?[+(h[0]/W).toFixed(5),+(h[1]/H).toFixed(5),+(h[2]/W).toFixed(5),+(h[3]/H).toFixed(5)]:null)}
+  if(kind==="rect"||(kind==="rrect"&&shp.round<=0.001)){add(cx-rx,cy-ry);add(cx+rx,cy-ry);add(cx+rx,cy+ry);add(cx-rx,cy+ry)}
+  else if(kind==="rrect"){
+    var rr=Math.min(rx,ry)*Math.min(1,shp.round),k=0.5523*rr,L=cx-rx,R=cx+rx,T=cy-ry,B=cy+ry;
+    add(L+rr,T,[L+rr-k,T,L+rr,T]);add(R-rr,T,[R-rr,T,R-rr+k,T]);
+    add(R,T+rr,[R,T+rr-k,R,T+rr]);add(R,B-rr,[R,B-rr,R,B-rr+k]);
+    add(R-rr,B,[R-rr+k,B,R-rr,B]);add(L+rr,B,[L+rr,B,L+rr-k,B]);
+    add(L,B-rr,[L,B-rr+k,L,B-rr]);add(L,T+rr,[L,T+rr,L,T+rr-k]);
+  }else if(kind==="ellipse"){
+    var N=Math.max(4,Math.round(shp.ellPts));K=4/3*Math.tan(Math.PI/(2*N));
+    for(var i=0;i<N;i++){var a=-Math.PI/2+i*2*Math.PI/N,x=cx+rx*Math.cos(a),y=cy+ry*Math.sin(a),tx=-rx*Math.sin(a)*K,ty=ry*Math.cos(a)*K;add(x,y,[x-tx,y-ty,x+tx,y+ty])}
+  }else if(kind==="poly"){
+    var N=Math.max(3,Math.round(shp.sides));for(var i=0;i<N;i++){var a=-Math.PI/2+i*2*Math.PI/N;add(cx+rx*Math.cos(a),cy+ry*Math.sin(a))}
+  }else if(kind==="star"){
+    var N=Math.max(3,Math.round(shp.sides)),ir=1-shp.starDepth;for(var i=0;i<N*2;i++){var a=-Math.PI/2+i*Math.PI/N,f=i%2?ir:1;add(cx+rx*f*Math.cos(a),cy+ry*f*Math.sin(a))}
+  }
+  return{poly:P,hnd:Hd};
+}
+// The boxes for every ring: equal pixel gaps from the outer box in to the inner size
+function shapeBoxes(x0,y0,x1,y1){
+  var bx=[Math.min(x0,x1),Math.min(y0,y1),Math.max(x0,x1),Math.max(y0,y1)],N=Math.max(1,Math.round(shp.rings)),out=[];
+  var half=Math.min(bx[2]-bx[0],bx[3]-bx[1])/2,gap=N>1?half*(1-shp.inner)/(N-1):0;
+  for(var k=0;k<N;k++){var g=k*gap;out.push([bx[0]+g,bx[1]+g,bx[2]-g,bx[3]-g])}
+  return out;
+}
+function dragBox(sd){
+  var x0=sd.x0*W,y0=sd.y0*H,x1=sd.x1*W,y1=sd.y1*H;
+  if(Math.abs(x1-x0)<6&&Math.abs(y1-y0)<6){var s=Math.min(W,H)*0.15;return[x0-s,y0-s,x0+s,y0+s]}
+  if(sd.square){var s=Math.max(Math.abs(x1-x0),Math.abs(y1-y0));x1=x0+(x1>=x0?s:-s);y1=y0+(y1>=y0?s:-s)}
+  return[x0,y0,x1,y1];
+}
+function commitShape(){
+  var sd=shapeDrag;shapeDrag=null;if(!sd||!shapeTool)return;
+  var b=dragBox(sd),boxes=shapeBoxes(b[0],b[1],b[2],b[3]);
+  saveUndo();
+  var nm=SHAPE_NAME[shapeTool],base=regs.length,grp=shp.group&&boxes.length>1?nm+" "+(base+1):"";
+  for(var k=0;k<boxes.length;k++){
+    var bx=boxes[k];if(bx[2]-bx[0]<2||bx[3]-bx[1]<2)continue;
+    var g=genShape(shapeTool,bx[0],bx[1],bx[2],bx[3]);
+    var lbl=nm+" "+(base+1)+(boxes.length>1?"."+(k+1):"");
+    var r=shp.outline?mkSpline(lbl):mkReg(lbl);
+    r.poly=g.poly;r.hnd=g.hnd;r.closed=true;r.color=COLS[regs.length%COLS.length];r.group=grp;
+    if(boxes.length>1){r.fillHue=(200+k*360/boxes.length)%360;r.edgeHue=(180+k*360/boxes.length)%360}
+    regs.push(r);
+  }
+  active=regs.length-1;selVtx=-1;
+  document.getElementById("info").textContent="Added "+nm+(boxes.length>1?" × "+boxes.length+" rings":"")+" — drag points/handles, drag inside to move";
+  buildP();
+}
+// Dashed preview while dragging a shape
+function drawShapePreview(g){
+  if(!shapeDrag||!shapeTool)return;var sf=W/960,b=dragBox(shapeDrag),boxes=shapeBoxes(b[0],b[1],b[2],b[3]);
+  g.save();g.setLineDash([6*sf,4*sf]);g.strokeStyle="#ff0";g.lineWidth=2*sf;
+  for(var k=0;k<boxes.length;k++){var bx=boxes[k],s=genShape(shapeTool,bx[0],bx[1],bx[2],bx[3]),tmp={poly:s.poly,hnd:s.hnd,closed:true};pp2(g,geo(tmp),true);g.stroke()}
+  g.restore();
+}
+// Handles of the active shape (operator view and projector)
+function drawHandles(g,r){
+  if(!r||!r.hnd)return;var sf=W/960;g.save();g.lineWidth=1*sf;
+  for(var i=0;i<r.poly.length;i++){var h=r.hnd[i];if(!h)continue;var x=r.poly[i][0]*W,y=r.poly[i][1]*H;
+    g.strokeStyle="rgba(120,200,255,0.8)";g.beginPath();g.moveTo(h[0]*W,h[1]*H);g.lineTo(x,y);g.lineTo(h[2]*W,h[3]*H);g.stroke();
+    var sel=dragH&&dragH.i===i;
+    for(var s=0;s<2;s++){var hx=h[s*2]*W,hy=h[s*2+1]*H;g.fillStyle=sel&&dragH.side===s?"#0ff":"#7cf";g.fillRect(hx-3.5*sf,hy-3.5*sf,7*sf,7*sf)}
+  }
+  g.restore();
+}
+function nearHandle(r,x,y,th){if(!r||!r.hnd)return null;for(var i=0;i<r.poly.length;i++){var h=r.hnd[i];if(!h)continue;for(var s=0;s<2;s++){if(Math.hypot((h[s*2]-x)*W,(h[s*2+1]-y)*H)<th)return{i:i,side:s}}}return null}
+function sectionShapes(){
+  var h='<div class="sec">'+secHead('shapeOpenP','SHAPES / CURVES'+(shapeTool?' ● '+SHAPE_NAME[shapeTool]:''),shapeOpenP);
+  if(shapeOpenP){
+    h+='<div class="rw" style="flex-wrap:wrap;gap:2px">';
+    for(var i=0;i<SHAPES.length;i++){var k=SHAPES[i][0];h+='<button class="btn-sm" style="flex:1 1 30%;white-space:nowrap;color:'+(shapeTool===k?'#ff0':'#aaa')+';border-color:'+(shapeTool===k?'#aa6':'#444')+'" onclick="event.stopPropagation();setShapeTool(\''+k+'\')">'+SHAPES[i][1]+'</button>'}
+    h+='</div>';
+    function sr(lbl,key,min,max,step){return '<div class="rw"><label>'+lbl+'</label><input type=range min='+min+' max='+max+' step='+step+' value='+shp[key]+' oninput="shp.'+key+'=+this.value;this.nextSibling.textContent=this.value"><span style="font-size:8px;color:#888;width:22px;text-align:right">'+shp[key]+'</span></div>'}
+    h+=sr('Rings','rings',1,12,1);
+    h+=sr('Inner size','inner',0.05,0.95,0.05);
+    h+=sr('Sides','sides',3,24,1)+sr('Star depth','starDepth',0.1,0.9,0.05)+sr('Corner round','round',0,1,0.05)+sr('Ellipse pts','ellPts',4,32,1);
+    h+=tog('Square / circle','shp.square',shp.square)+tog('Outline only','shp.outline',shp.outline)+tog('Group rings','shp.group',shp.group);
+    h+=hint('Pick a shape, then drag on the canvas or the projector (Shift = square/circle, a single click drops a default size). Rings makes concentric copies down to Inner size. Outline only makes spline loops for edge effects with no fill.');
+    h+=hint('Curves: double-click a point (or press B) to toggle it between sharp and curved; drag the blue handles, Alt-drag to break the pair. Click an outline to add a point. Drag inside a shape to move it; with no point ringed, arrows move it, [ ] scale, Shift+[ ] rotate.');
+  }
+  return h+'</div>';
+}
+
 // Poly helpers
 function pp(p){ctx.beginPath();for(var i=0;i<p.length;i++){if(i===0)ctx.moveTo(p[i][0]*W,p[i][1]*H);else ctx.lineTo(p[i][0]*W,p[i][1]*H)}ctx.closePath()}
 function ppOpen(p){ctx.beginPath();for(var i=0;i<p.length;i++){if(i===0)ctx.moveTo(p[i][0]*W,p[i][1]*H);else ctx.lineTo(p[i][0]*W,p[i][1]*H)}}
-function eLen(p){var l=0;for(var i=0;i<p.length;i++){var j=(i+1)%p.length;var dx=(p[j][0]-p[i][0])*W,dy=(p[j][1]-p[i][1])*H;l+=Math.sqrt(dx*dx+dy*dy)}return l}
+var edgeClosed=true,frameNo=0,lastTickT=0,_pt={p:null};
+function pTab(p){var cl=edgeClosed&&p.length>2;if(_pt.p===p&&_pt.cl===cl&&_pt.n===p.length&&_pt.f===frameNo&&_pt.W===W)return _pt;
+  var n=p.length,segs=cl?n:n-1,X=new Float64Array(n),Y=new Float64Array(n),cum=new Float64Array(segs+1);
+  for(var i=0;i<n;i++){X[i]=p[i][0]*W;Y[i]=p[i][1]*H}
+  for(var i=0;i<segs;i++){var j=(i+1)%n;cum[i+1]=cum[i]+Math.hypot(X[j]-X[i],Y[j]-Y[i])}
+  _pt={p:p,cl:cl,n:n,segs:segs,X:X,Y:Y,cum:cum,len:cum[segs],f:frameNo,W:W};return _pt}
+function eLen(p){return p.length<2?0:pTab(p).len}
+function ppE(p){if(edgeClosed)pp(p);else ppOpen(p)}
 function eLenOpen(p){var l=0;for(var i=0;i<p.length-1;i++){var dx=(p[i+1][0]-p[i][0])*W,dy=(p[i+1][1]-p[i][1])*H;l+=Math.sqrt(dx*dx+dy*dy)}return l}
-function ptOn(p,d){var rem=d;for(var i=0;i<p.length;i++){var j=(i+1)%p.length;var dx=(p[j][0]-p[i][0])*W,dy=(p[j][1]-p[i][1])*H;var s=Math.sqrt(dx*dx+dy*dy);if(rem<=s){var t=rem/s;return{x:p[i][0]*W+dx*t,y:p[i][1]*H+dy*t}}rem-=s}return{x:p[0][0]*W,y:p[0][1]*H}}
+function ptOn(p,d){if(p.length<2)return p.length?{x:p[0][0]*W,y:p[0][1]*H}:{x:0,y:0};var T=pTab(p),L=T.len;if(!(L>0))return{x:T.X[0],y:T.Y[0]};
+  if(T.cl)d=((d%L)+L)%L;else d=Math.max(0,Math.min(L,d));
+  var lo=0,hi=T.segs;while(hi-lo>1){var m=(lo+hi)>>1;if(T.cum[m]<=d)lo=m;else hi=m}
+  var sl=T.cum[lo+1]-T.cum[lo],t=sl>0?(d-T.cum[lo])/sl:0,j=(lo+1)%T.n;return{x:T.X[lo]+(T.X[j]-T.X[lo])*t,y:T.Y[lo]+(T.Y[j]-T.Y[lo])*t}}
 function ptOnOpen(p,d){var rem=d;for(var i=0;i<p.length-1;i++){var dx=(p[i+1][0]-p[i][0])*W,dy=(p[i+1][1]-p[i][1])*H;var s=Math.sqrt(dx*dx+dy*dy);if(rem<=s){var t=rem/s;return{x:p[i][0]*W+dx*t,y:p[i][1]*H+dy*t}}rem-=s}var last=p[p.length-1];return{x:last[0]*W,y:last[1]*H}}
 function polyCtr(p){var cx=0,cy=0;for(var i=0;i<p.length;i++){cx+=p[i][0];cy+=p[i][1]}return{x:cx/p.length*W,y:cy/p.length*H}}
 function polyBB(p){var x0=1,y0=1,x1=0,y1=0;for(var i=0;i<p.length;i++){if(p[i][0]<x0)x0=p[i][0];if(p[i][0]>x1)x1=p[i][0];if(p[i][1]<y0)y0=p[i][1];if(p[i][1]>y1)y1=p[i][1]}return{x:Math.floor(x0*W),y:Math.floor(y0*H),w:Math.ceil((x1-x0)*W),h:Math.ceil((y1-y0)*H),x1:Math.ceil(x1*W),y1:Math.ceil(y1*H)}}
@@ -1003,21 +1118,21 @@ function fChecker(r,t){var s=t*r.fillSpeed,sc=Math.max(8,30*r.scale),a=r.angle*M
 function fWave(r,t){var s=t*r.fillSpeed,sc=r.scale,bb=polyBB(r.poly);for(var y=bb.y;y<bb.y1;y+=3){var wave=Math.sin(y*0.05/sc+s*2)*bb.w*0.3*sc;var lum=(Math.sin(y*0.02/sc+s)*0.3+0.5)*r.fillInt*gBright;ctx.strokeStyle=hs(r.fillHue+y*0.1,0.8,lum);ctx.lineWidth=2;ctx.beginPath();ctx.moveTo(bb.x+bb.w/2+wave-bb.w*0.4,y);ctx.lineTo(bb.x+bb.w/2+wave+bb.w*0.4,y);ctx.stroke()}}
 
 // ============ EDGE RENDERERS ============
-function ePulse(r,t){var len=eLen(r.poly),s=t*r.edgeSpeed,pc=3,pl=len/pc;ctx.lineCap="round";for(var p=0;p<pc;p++){var hd=((s*80+p*pl)%len+len)%len;for(var i=0;i<20;i++){var d1=((hd-i*(pl*0.6/20))%len+len)%len,d2=((d1+pl*0.6/20)%len+len)%len;var p1=ptOn(r.poly,d1),p2=ptOn(r.poly,d2);ctx.strokeStyle=hs(r.edgeHue,0.9,(1-i/20)*r.edgeInt*0.6*gBright);ctx.lineWidth=r.edgeWidth*(1-i/20*0.5);ctx.beginPath();ctx.moveTo(p1.x,p1.y);ctx.lineTo(p2.x,p2.y);ctx.stroke()}}}
+function ePulse(r,t){var len=eLen(r.poly),s=t*r.edgeSpeed,pc=3,pl=len/pc;ctx.lineCap="round";for(var p=0;p<pc;p++){var hd=((s*80+p*pl)%len+len)%len;for(var i=0;i<20;i++){var d1=((hd-i*(pl*0.6/20))%len+len)%len,d2=((d1+pl*0.6/20)%len+len)%len;if(!edgeClosed&&d2<d1)continue;var p1=ptOn(r.poly,d1),p2=ptOn(r.poly,d2);ctx.strokeStyle=hs(r.edgeHue,0.9,(1-i/20)*r.edgeInt*0.6*gBright);ctx.lineWidth=r.edgeWidth*(1-i/20*0.5);ctx.beginPath();ctx.moveTo(p1.x,p1.y);ctx.lineTo(p2.x,p2.y);ctx.stroke()}}}
 
 function eFlow(r,t){var len=eLen(r.poly),s=t*r.edgeSpeed,ct=12,sp=len/ct;for(var p=0;p<ct;p++){var d=((s*60+p*sp)%len+len)%len,pt=ptOn(r.poly,d);ctx.fillStyle=hs(r.edgeHue+p*5,0.9,(Math.sin(s*3+p*0.8)*0.3+0.7)*r.edgeInt*0.6*gBright);ctx.beginPath();ctx.arc(pt.x,pt.y,r.edgeWidth*1.5,0,Math.PI*2);ctx.fill()}}
 
-function eStrobe(r,t){var s=t*r.edgeSpeed,lm=(Math.sin(s*4)*0.5+0.5)*r.edgeInt*0.7*gBright;ctx.strokeStyle=hs(r.edgeHue,1,lm);ctx.lineWidth=r.edgeWidth;pp(r.poly);ctx.stroke()}
+function eStrobe(r,t){var s=t*r.edgeSpeed,lm=(Math.sin(s*4)*0.5+0.5)*r.edgeInt*0.7*gBright;ctx.strokeStyle=hs(r.edgeHue,1,lm);ctx.lineWidth=r.edgeWidth;ppE(r.poly);ctx.stroke()}
 
 function eMaze(r,t){var len=eLen(r.poly),s=t*r.edgeSpeed,sl=12,sg=Math.floor(len/sl);for(var i=0;i<sg;i++){var ph=Math.sin(i*0.5+s*2)*0.5+0.5;if(ph<0.4)continue;var p1=ptOn(r.poly,i*sl),p2=ptOn(r.poly,Math.min((i+1)*sl,len));ctx.strokeStyle=hs(r.edgeHue+i*2,0.8,ph*r.edgeInt*0.6*gBright);ctx.lineWidth=r.edgeWidth*(0.5+ph*0.5);ctx.beginPath();ctx.moveTo(p1.x,p1.y);ctx.lineTo(p2.x,p2.y);ctx.stroke()}}
 
-function eGlow(r,t){var s=t*r.edgeSpeed;var pulse=Math.sin(s)*0.2+0.8;for(var g=4;g>=0;g--){var w=r.edgeWidth*(1+g*1.2);var alpha=(1-g/4)*0.3*r.edgeInt*gBright*pulse;ctx.strokeStyle="hsla("+((r.edgeHue%360+360)%360)+",90%,60%,"+alpha+")";ctx.lineWidth=w;pp(r.poly);ctx.stroke()}}
+function eGlow(r,t){var s=t*r.edgeSpeed;var pulse=Math.sin(s)*0.2+0.8;for(var g=4;g>=0;g--){var w=r.edgeWidth*(1+g*1.2);var alpha=(1-g/4)*0.3*r.edgeInt*gBright*pulse;ctx.strokeStyle="hsla("+((r.edgeHue%360+360)%360)+",90%,60%,"+alpha+")";ctx.lineWidth=w;ppE(r.poly);ctx.stroke()}}
 
-function eDashes(r,t){var len=eLen(r.poly),s=t*r.edgeSpeed;var dashLen=Math.max(4,20*r.scale);var gapLen=dashLen*0.6;var total=dashLen+gapLen;var segs=Math.floor(len/total);ctx.lineCap="round";for(var i=0;i<segs;i++){var d1=(i*total+s*50)%len;var d2=(d1+dashLen)%len;var p1=ptOn(r.poly,d1),p2=ptOn(r.poly,d2);var phase=Math.sin(i*0.3+s*2)*0.3+0.7;ctx.strokeStyle=hs(r.edgeHue+i*3,0.9,phase*r.edgeInt*0.6*gBright);ctx.lineWidth=r.edgeWidth;ctx.beginPath();ctx.moveTo(p1.x,p1.y);ctx.lineTo(p2.x,p2.y);ctx.stroke()}}
+function eDashes(r,t){var len=eLen(r.poly),s=t*r.edgeSpeed;var dashLen=Math.max(4,20*r.scale);var gapLen=dashLen*0.6;var total=dashLen+gapLen;var segs=Math.floor(len/total);ctx.lineCap="round";for(var i=0;i<segs;i++){var d1=(i*total+s*50)%len;var d2=(d1+dashLen)%len;if(!edgeClosed&&d2<d1)continue;var p1=ptOn(r.poly,d1),p2=ptOn(r.poly,d2);var phase=Math.sin(i*0.3+s*2)*0.3+0.7;ctx.strokeStyle=hs(r.edgeHue+i*3,0.9,phase*r.edgeInt*0.6*gBright);ctx.lineWidth=r.edgeWidth;ctx.beginPath();ctx.moveTo(p1.x,p1.y);ctx.lineTo(p2.x,p2.y);ctx.stroke()}}
 
 var ED={pulse:ePulse,flow:eFlow,strobe:eStrobe,maze:eMaze,glow:eGlow,dashes:eDashes,"double":eDouble,dotted:eDotted};
 
-function eDouble(r,t){var s=t*r.edgeSpeed;var pulse=Math.sin(s*2)*0.15+0.85;ctx.lineWidth=r.edgeWidth*2;ctx.strokeStyle=hs(r.edgeHue+20,0.7,0.3*r.edgeInt*gBright*pulse);pp(r.poly);ctx.stroke();ctx.lineWidth=r.edgeWidth*0.6;ctx.strokeStyle=hs(r.edgeHue,0.9,0.6*r.edgeInt*gBright*pulse);pp(r.poly);ctx.stroke()}
+function eDouble(r,t){var s=t*r.edgeSpeed;var pulse=Math.sin(s*2)*0.15+0.85;ctx.lineWidth=r.edgeWidth*2;ctx.strokeStyle=hs(r.edgeHue+20,0.7,0.3*r.edgeInt*gBright*pulse);ppE(r.poly);ctx.stroke();ctx.lineWidth=r.edgeWidth*0.6;ctx.strokeStyle=hs(r.edgeHue,0.9,0.6*r.edgeInt*gBright*pulse);ppE(r.poly);ctx.stroke()}
 
 function eDotted(r,t){var len=eLen(r.poly),s=t*r.edgeSpeed;var spacing=Math.max(6,15*r.scale);var count=Math.floor(len/spacing);for(var i=0;i<count;i++){var d=((i*spacing+s*40)%len+len)%len;var pt=ptOn(r.poly,d);var pulse=Math.sin(s*3+i*0.4)*0.2+0.8;ctx.fillStyle=hs(r.edgeHue+i*2,0.9,pulse*r.edgeInt*0.6*gBright);ctx.beginPath();ctx.arc(pt.x,pt.y,r.edgeWidth*0.7,0,Math.PI*2);ctx.fill()}}
 
@@ -1106,6 +1221,7 @@ var TD={center:drawTextCenter,edge:drawTextEdge,scroll:drawTextScroll};
 
 // ============ RENDER ============
 function render(){
+  frameNo++;
   if(mode==="edit"){
     ctx.fillStyle="#000";ctx.fillRect(0,0,W,H);
     if(scan.view==="calib"){drawCalibView(ctx)}else{
@@ -1114,10 +1230,11 @@ function render(){
     for(var ri=0;ri<regs.length;ri++){
       var r=regs[ri],act=ri===active;
       if(r.poly.length<1)continue;
-      if(r.poly.length>=3&&r.closed&&r.type!=="spline"){ctx.fillStyle=r.color+"22";pp(r.poly);ctx.fill()}
+      var gp=geo(r);
+      if(r.poly.length>=3&&r.closed&&r.type!=="spline"){ctx.fillStyle=r.color+"22";pp(gp);ctx.fill()}
       ctx.strokeStyle=act?"#fff":r.color;ctx.lineWidth=act?2:1;
-      ctx.beginPath();for(var j=0;j<r.poly.length;j++){if(j===0)ctx.moveTo(r.poly[j][0]*W,r.poly[j][1]*H);else ctx.lineTo(r.poly[j][0]*W,r.poly[j][1]*H)}
-      if(r.closed&&r.type!=="spline")ctx.closePath();ctx.stroke();
+      pp2(ctx,gp,isClosedPath(r));ctx.stroke();
+      if(act)drawHandles(ctx,r);
       for(var j=0;j<r.poly.length;j++){
         var isLast=j===r.poly.length-1&&!r.closed&&act,isDrg=act&&isDragging&&dragIdx===j;
         ctx.fillStyle=isDrg?"#0ff":isLast?"#ff0":"#fff";
@@ -1136,6 +1253,7 @@ function render(){
       }
     }
     if(scan.view==="scan"&&scan.preview)drawScanPolys(ctx);
+    drawShapePreview(ctx);
     }
   }else{
     // Apply global mods to trails for the clear
@@ -1148,7 +1266,7 @@ function render(){
     var hasSolo=false;
     for(var ri=0;ri<regs.length;ri++)if(regs[ri].solo){hasSolo=true;break}
     for(var ri=0;ri<regs.length;ri++){
-      var r=applyMods(regs[ri],time);
+      var r=applyMods(regs[ri],time);r.poly=geo(regs[ri]);
       var isSpline=r.type==="spline";
       if(isSpline){if(r.poly.length<2)continue}
       else{if(!r.closed||r.poly.length<3)continue}
@@ -1157,12 +1275,13 @@ function render(){
       ctx.globalCompositeOperation=r.blend||"source-over";
       ctx.globalAlpha=r.opacity;
       if(!isSpline&&r.fill!=="off"&&FD[r.fill]){ctx.save();pp(r.poly);ctx.clip();FD[r.fill](r,time+r.phase);ctx.restore()}
+      edgeClosed=isSpline?isClosedPath(r):true;
       if(r.edge!=="off"&&ED[r.edge]){ctx.save();ED[r.edge](r,time+r.phase);ctx.restore()}
       if(r.textMode!=="off"&&r.text&&TD[r.textMode]){
         if(r.textMode==="edge"||isSpline){ctx.save();TD[r.textMode](r,time+r.phase);ctx.restore()}
         else{ctx.save();pp(r.poly);ctx.clip();TD[r.textMode](r,time+r.phase);ctx.restore()}
       }
-      ctx.globalCompositeOperation="source-over";ctx.globalAlpha=1;
+      ctx.globalCompositeOperation="source-over";ctx.globalAlpha=1;edgeClosed=true;
     }
     // Mirror
     if(mirrorH||mirrorV){ctx.save();ctx.translate(mirrorH?W:0,mirrorV?H:0);ctx.scale(mirrorH?-1:1,mirrorV?-1:1);ctx.globalAlpha=0.5;ctx.globalCompositeOperation="lighter";ctx.drawImage(pc,0,0);ctx.restore()}
@@ -1187,7 +1306,8 @@ function render(){
     if(mChrom>0){var off=Math.round(mChrom*6);ctx.save();ctx.globalCompositeOperation="lighter";ctx.globalAlpha=0.5;ctx.drawImage(pc,off,0);ctx.drawImage(pc,-off,0);ctx.restore()}
     if(mVig>0){var vg=ctx.createRadialGradient(W/2,H/2,W*0.2,W/2,H/2,W*0.7);vg.addColorStop(0,"rgba(0,0,0,0)");vg.addColorStop(1,"rgba(0,0,0,"+mVig+")");ctx.fillStyle=vg;ctx.fillRect(0,0,W,H)}
     if(mBlack>0){ctx.fillStyle="rgba(0,0,0,"+mBlack+")";ctx.fillRect(0,0,W,H)}
-    if(running)time+=0.016*gSpeed;
+    var tN=performance.now(),dtS=lastTickT?Math.min(0.05,(tN-lastTickT)/1000):0.016;lastTickT=tN;
+    if(running)time+=dtS*gSpeed;
   }
   // FPS
   frameCount++;var now=performance.now();
@@ -1215,7 +1335,6 @@ function schedule(){
 }
 function frame(){
   lastRender=performance.now();
-  try{pumpTools()}catch(e){}
   try{scanTick();render()}catch(e){console.error(e)}
   schedule();
 }
@@ -1481,18 +1600,9 @@ function addSource(kind,name,stream,extra){
   if(stream)stream.getVideoTracks().forEach(function(t){t.addEventListener("ended",function(){s.ended=true;s.status="ended";buildP()})});
   sources.push(s);srcOpenP=true;buildP();return s;
 }
-// Tab / window capture. Chrome always marks a shared tab with its own "sharing this tab" bar (a page
-// can't turn that off); these options at least keep MetaMapper out of the picker and stop Chrome
-// jumping to the shared tab when sharing starts.
-function captureDisplay(){
-  var o={video:{frameRate:30},audio:false,selfBrowserSurface:"exclude",surfaceSwitching:"include"};
-  try{if(window.CaptureController){var cc=new CaptureController();o.controller=cc;
-    return navigator.mediaDevices.getDisplayMedia(o).then(function(st){try{cc.setFocusBehavior("no-focus-change")}catch(e){}return st})}}catch(e){}
-  return navigator.mediaDevices.getDisplayMedia(o);
-}
 function addTabSource(){
   if(!navigator.mediaDevices||!navigator.mediaDevices.getDisplayMedia){alert("Tab / window capture isn't supported in this browser");return}
-  captureDisplay().then(function(st){var t=st.getVideoTracks()[0];addSource("tab",(t&&t.label)||"Captured tab",st)}).catch(function(){});
+  navigator.mediaDevices.getDisplayMedia({video:{frameRate:30},audio:false}).then(function(st){var t=st.getVideoTracks()[0];addSource("tab",(t&&t.label)||"Captured tab",st)}).catch(function(){});
 }
 function addCamSource(){
   navigator.mediaDevices.getUserMedia({video:{width:{ideal:1280},height:{ideal:720}},audio:false}).then(function(st){var t=st.getVideoTracks()[0];addSource("camera",(t&&t.label)||"Camera",st)}).catch(function(e){alert("Camera unavailable: "+e.message)});
@@ -1507,51 +1617,7 @@ function addToolSource(url){
   var nm=url.split("?")[0].split("/").filter(Boolean).pop()||url;
   addSource("tool",nm.replace(/\.html?$/i,"")||"Tool",null,{win:w,url:url,status:"loading…"});
 }
-var SUITE_TOOLS=[["manifold.html","Manifold"],["lattice.html","Lattice"],["ouroboros.html","Ouroboros"],["flow-weave.html","Flow Weave"],
-  ["melted-world.html","Melted World"],["sediment.html","Sediment"],["anchor.html","Anchor"],["relief.html","Relief"],
-  ["flow-field-plotter.html","Flow Field Plotter"],["time-cube.html","Time Cube"],["tbg-facade.html","TBG Facade"],["worldseed.html","Worldseed"],["galaxy.html","Galaxy"]];
-// the address box may hold a whole page or just the folder the suite lives in
-function toolBase(){var u=(toolURL||"").trim();if(!u)return"../Unlimiter/";if(/\.html?(\?|#|$)/i.test(u))return u.replace(/[^\/]*$/,"");return u.replace(/\/?$/,"/")}
-function openSuiteTool(file){var nm=null;for(var i=0;i<SUITE_TOOLS.length;i++)if(SUITE_TOOLS[i][0]===file)nm=SUITE_TOOLS[i][1];
-  var url=toolBase()+file,w=window.open(url,"mm_tool_"+(srcSeq+1),"width=1280,height=760");
-  if(!w){alert("Pop-up blocked — allow pop-ups for this page");return null}
-  return addSource("tool",nm||file,null,{win:w,url:url,status:"loading…"})}
-// a region's Source menu can add a source and use it in one go
-function pickSource(i,v){
-  if(v.indexOf("+tool:")===0){var s=openSuiteTool(v.slice(6));if(s)setP(i,"srcId",s.id);buildP();return}
-  if(v==="+cam"){navigator.mediaDevices.getUserMedia({video:{width:{ideal:1280},height:{ideal:720}},audio:false}).then(function(st){var t=st.getVideoTracks()[0];var s=addSource("camera",(t&&t.label)||"Camera",st);setP(i,"srcId",s.id);buildP()}).catch(function(e){alert("Camera unavailable: "+e.message);buildP()});return}
-  if(v==="+tab"){if(!navigator.mediaDevices||!navigator.mediaDevices.getDisplayMedia){alert("Tab / window capture isn't supported in this browser");return}
-    captureDisplay().then(function(st){var t=st.getVideoTracks()[0];var s=addSource("tab",(t&&t.label)||"Captured tab",st);setP(i,"srcId",s.id);buildP()}).catch(function(){buildP()});return}
-  setP(i,"srcId",v);buildP();
-}
-/* Browsers stop a page's animation frames once its window is minimised (or fully covered),
-   so a tool popup would freeze the moment it is out of sight. MetaMapper is on screen anyway —
-   it drives the projector — so it takes over the tool's frame clock: the tool's
-   requestAnimationFrame callbacks are queued and run from MetaMapper's own frame, and
-   the region draws the tool's canvas straight after, in the same moment. */
-function bridgeTool(s){
-  var w=s.win;if(!w||w.closed)return false;
-  try{
-    if(w.__mmBridge)return true;
-    var q=[],seq=1;
-    w.__mmQ=q;
-    w.requestAnimationFrame=function(cb){var h=seq++;q.push([h,cb]);return h};
-    w.cancelAnimationFrame=function(h){for(var i=q.length-1;i>=0;i--)if(q[i][0]===h)q.splice(i,1)};
-    w.__mmBridge=true;
-    return true;
-  }catch(e){return false}
-}
-function pumpTools(){
-  for(var i=0;i<sources.length;i++){
-    var s=sources[i];if(s.kind!=="tool"||!s.win||s.win.closed)continue;
-    var q;try{q=s.win.__mmQ}catch(e){continue}
-    if(!q||!q.length)continue;
-    var batch=q.splice(0,q.length),now;try{now=s.win.performance.now()}catch(e){now=performance.now()}
-    for(var k=0;k<batch.length;k++){try{batch[k][1](now)}catch(e){console.warn("[tool "+s.name+"]",e)}}
-  }
-}
-function updSrcStatus(s){var el=document.getElementById("srcst_"+s.id);if(el)el.textContent=s.status;
-  document.querySelectorAll('[data-srcst="'+s.id+'"]').forEach(function(e){e.textContent=s.status||"";e.style.color=/^live/.test(s.status||"")?"#8f8":"#f9a"})}
+function updSrcStatus(s){var el=document.getElementById("srcst_"+s.id);if(el)el.textContent=s.status}
 function pollToolSources(){
   sources.forEach(function(s){
     if(s.kind!=="tool")return;
@@ -1561,13 +1627,12 @@ function pollToolSources(){
     var best=null,ba=0,cvs=doc.querySelectorAll("canvas");
     for(var i=0;i<cvs.length;i++){var cv=cvs[i],a=cv.width*cv.height;if(cv.offsetWidth>0&&a>ba){ba=a;best=cv}}
     if(!best){if(s.status!=="no canvas yet"){s.status="no canvas yet";updSrcStatus(s)}return}
-    s.bridged=bridgeTool(s);
     if(best!==s.canvas||!s.stream||s.ended){
       try{
         var st=best.captureStream(30);
         if(s.video&&s.video.parentNode)s.video.parentNode.removeChild(s.video);
         if(s.stream)s.stream.getTracks().forEach(function(t){t.stop()});
-        s.stream=st;s.video=mkStreamVideo(st);s.canvas=best;s.ended=false;s.status="live "+best.width+"×"+best.height+(s.bridged?" · keeps running minimised":"");updSrcStatus(s);
+        s.stream=st;s.video=mkStreamVideo(st);s.canvas=best;s.ended=false;s.status="live "+best.width+"×"+best.height;updSrcStatus(s);
       }catch(e){s.status="capture failed";updSrcStatus(s)}
     }
   });
@@ -1582,9 +1647,7 @@ function removeSource(id){
   buildP();
 }
 function srcById(id){for(var i=0;i<sources.length;i++)if(sources[i].id===id)return sources[i];return null}
-function fSource(r,t){var s=srcById(r.srcId);if(!s)return;
-  if(s.kind==="tool"&&s.bridged&&s.canvas&&s.win&&!s.win.closed&&s.canvas.width){try{drawMediaFill(r,t,s.canvas,s.canvas.width,s.canvas.height);return}catch(e){}}
-  if(!s.video)return;var v=s.video;if(v.readyState<2||!v.videoWidth)return;drawMediaFill(r,t,v,v.videoWidth,v.videoHeight)}
+function fSource(r,t){var s=srcById(r.srcId);if(!s||!s.video)return;var v=s.video;if(v.readyState<2||!v.videoWidth)return;drawMediaFill(r,t,v,v.videoWidth,v.videoHeight)}
 
 // ============ PANEL SECTIONS: projector, scan, sources ============
 var SS='onclick="event.stopPropagation()" onmousedown="event.stopPropagation()"';
@@ -1638,10 +1701,7 @@ function sectionSources(){
   var h='<div class="sec">'+secHead('srcOpenP','LIVE SOURCES'+(sources.length?' ('+sources.length+')':''),srcOpenP);
   if(srcOpenP){
     h+='<div class="rw"><button class="btn-sm" onclick="event.stopPropagation();addTabSource()">+ Tab / window</button><button class="btn-sm" onclick="event.stopPropagation();addCamSource()">+ Camera</button></div>';
-    h+='<div class="rw"><label>Camera</label><span id="mmCamPick" style="display:flex;flex:1;min-width:0"></span></div>';
     h+='<div class="rw"><input id="toolUrl" type=text value="'+esc(toolURL)+'" style="width:150px;background:#222;color:#bbb;border:1px solid #444;font-size:9px;padding:1px 3px" onclick="event.stopPropagation()"><button class="btn-sm" onclick="event.stopPropagation();addToolSource(document.getElementById(\'toolUrl\').value)">+ Tool</button></div>';
-    h+='<div class="rw"><select '+SS+' onchange="if(this.value)openSuiteTool(this.value)"><option value="">+ Unlimiter tool\u2026</option>';SUITE_TOOLS.forEach(function(t){h+=opt(t[0],'',t[1])});h+='</select></div>';
-    h+=hint('Tab / window capture makes Chrome show a sharing bar on the shared tab (it shrinks that tab; press Hide). Unlimiter tools opened from the list below avoid it entirely.','#9ab');
     h+=hint('+ Tool opens an Unlimiter page in its own window and pipes its canvas in live — tweak it in that window. Needs the same site as MetaMapper (e.g. both on racemetamo.github.io). For anything else use + Tab / window.');
     sources.forEach(function(s){
       var ic=s.kind==="tool"?"◈":s.kind==="camera"?"◉":"▣";
@@ -1656,7 +1716,7 @@ function sectionSources(){
 function buildP(){
   var el=document.getElementById("rc"),h="";
   var bo=document.getElementById("btnOut");if(bo)bo.classList.toggle("on",outOpen());syncMapBtn();
-  h+=sectionProjector()+sectionScan()+sectionSources();
+  h+=sectionShapes()+sectionProjector()+sectionScan()+sectionSources();
   // Global
   h+='<div class="sec"><div class="sh"><span>GLOBAL</span></div>';
   h+='<div class="rw"><label>Speed</label><input type=range min=0.1 max=3 step=0.1 value='+gSpeed+' oninput="gSpeed=+this.value"></div>';
@@ -1707,6 +1767,11 @@ function buildP(){
       h+='<button class="btn-sm" style="color:'+(r.mute?"#f66":"#aaa")+'" onclick="event.stopPropagation();regs['+i+'].mute=!regs['+i+'].mute;buildP()">M</button>';
       h+='<button class="btn-sm" style="color:'+(r.solo?"#ff0":"#aaa")+'" onclick="event.stopPropagation();regs['+i+'].solo=!regs['+i+'].solo;buildP()">S</button>';
       h+='</div>';
+      if(r.poly.length>=2){
+        var sv=selVtx>=0&&selVtx<r.poly.length;
+        h+='<div class="rw" style="gap:2px;justify-content:flex-start"><label>Curves</label><button class="btn-sm" onclick="event.stopPropagation();smoothAll(true)">Smooth all</button><button class="btn-sm" onclick="event.stopPropagation();smoothAll(false)">Sharpen all</button>'+(sv?'<button class="btn-sm" style="color:#7cf" onclick="event.stopPropagation();toggleSmooth(selVtx)">Pt '+selVtx+(r.hnd&&r.hnd[selVtx]?' → sharp':' → curve')+'</button>':'')+'</div>';
+        h+='<div class="rw" style="gap:2px;justify-content:flex-start"><label>Transform</label><button class="btn-sm" title="Shrink" onclick="event.stopPropagation();shapeXform(0.95,0,0,0)">−</button><button class="btn-sm" title="Grow" onclick="event.stopPropagation();shapeXform(1.05,0,0,0)">+</button><button class="btn-sm" title="Rotate 5° left" onclick="event.stopPropagation();shapeXform(1,-Math.PI/36,0,0)">⟲</button><button class="btn-sm" title="Rotate 5° right" onclick="event.stopPropagation();shapeXform(1,Math.PI/36,0,0)">⟳</button><button class="btn-sm" title="Flip horizontal" onclick="event.stopPropagation();flipShape(true)">⇔</button><button class="btn-sm" title="Flip vertical" onclick="event.stopPropagation();flipShape(false)">⇕</button></div>';
+      }
       h+='<div class="rw"><label>Group</label><input type=text value="'+(r.group||"")+'" placeholder="none" style="width:70px;background:#222;color:'+(r.group?"#f9a":"#666")+';border:1px solid #444;font-size:9px;padding:1px 3px" onclick="event.stopPropagation()" onmousedown="event.stopPropagation()" onchange="regs['+i+'].group=this.value;buildP()"></div>';
       h+='<div class="rw"><label>Name</label><input type=text value="'+r.label+'" style="width:90px;background:#222;color:#bbb;border:1px solid #444;font-size:9px;padding:1px 3px" onclick="event.stopPropagation()" onmousedown="event.stopPropagation()" onchange="regs['+i+'].label=this.value;buildP()"></div>';
       // Fill (not for splines)
@@ -1748,17 +1813,10 @@ function buildP(){
         h+='<div class="rw"><label style="font-size:8px;color:#666">Video not saved in JSON — reload per session</label></div>';
       }
       if(r.fill==="source"){
-        h+='<div class="rw"><label>Source</label><select '+SS+' onchange="pickSource('+i+',this.value)"><option value="">\u2014 pick \u2014</option>';
-        if(sources.length){h+='<optgroup label="Live sources">';sources.forEach(function(sv){h+=opt(sv.id,r.srcId,esc(sv.name))});h+='</optgroup>'}
-        h+='<optgroup label="Open an Unlimiter tool (no sharing bar)">';SUITE_TOOLS.forEach(function(t){h+=opt('+tool:'+t[0],'',t[1])});h+='</optgroup>';
-        h+='<optgroup label="Add and use">'+opt('+cam','','Camera…')+opt('+tab','','Tab / window…')+'</optgroup>';
+        h+='<div class="rw"><label>Source</label><select '+SS+' onchange="setP('+i+',\'srcId\',this.value)"><option value="">\u2014 pick \u2014</option>';
+        sources.forEach(function(sv){h+=opt(sv.id,r.srcId,esc(sv.name))});
         h+='</select></div>';
-        var cs=srcById(r.srcId);
-        if(cs){h+='<div class="rw"><label style="font-size:8px;color:#777">Status</label><span data-srcst="'+cs.id+'" style="font-size:9px;color:'+(/^live/.test(cs.status||"")?'#8f8':'#f9a')+'">'+esc(cs.status||"")+'</span></div>';
-          if(cs.kind==="tab")h+=hint('Chrome puts a \u201csharing this tab\u201d bar on the shared tab and shrinks it to fit \u2014 press Hide on the bar. For Unlimiter tools, open them from this menu instead: no bar, no prompt.','#9ab');
-          if(cs.status==="blocked (other site)")h+=hint('The browser won\'t let MetaMapper read this tool window: they have to come from the same site (both on racemetamo.github.io, or both from one local server). Opened as files, use Tab / window instead.','#f9a');}
-        else if(r.srcId)h+=hint('That source is gone (sources don\'t survive a reload) \u2014 pick it again.','#f9a');
-        else h+=hint('Pick a live source, or add one here: a camera, a tab or window, or an Unlimiter tool (opens in its own window from the address set in LIVE SOURCES).');
+        if(!sources.length)h+=hint('Add one in LIVE SOURCES first (Unlimiter tool, tab/window or camera).','#f9a');
         h+='<div class="rw"><label>Fit</label><select '+SS+' onchange="setP('+i+',\'vidFit\',this.value)">'+opt('cover',r.vidFit,'Cover')+opt('contain',r.vidFit,'Contain')+opt('tile',r.vidFit,'Tile')+'</select></div>';
         h+='<div class="rw"><label>Pos X</label><input type=range min=0 max=1 step=0.01 value='+r.vidOffsetX+' oninput="setP('+i+',\'vidOffsetX\',+this.value)"></div>';
         h+='<div class="rw"><label>Pos Y</label><input type=range min=0 max=1 step=0.01 value='+r.vidOffsetY+' oninput="setP('+i+',\'vidOffsetY\',+this.value)"></div>';
@@ -1815,7 +1873,6 @@ function buildP(){
     h+="</div>";
   }
   el.innerHTML=h;
-  var cp=document.getElementById("mmCamPick");if(cp&&window.UnlimiterCamera)UnlimiterCamera.mount(cp);
 }
 
 // ============ EXPORTS ============
@@ -1847,8 +1904,17 @@ function doImport(){
   };
   inp.click();
 }
-function exportSVG(){var svg='<?xml version="1.0"?>\n<svg xmlns="http://www.w3.org/2000/svg" width="'+W+'" height="'+H+'" viewBox="0 0 '+W+' '+H+'">\n<rect id="canvas" x="0" y="0" width="'+W+'" height="'+H+'" fill="none" stroke="#333" stroke-width="2"/>\n';for(var i=0;i<regs.length;i++){var r=regs[i];if(!r.closed||r.poly.length<3)continue;var pts="";for(var j=0;j<r.poly.length;j++)pts+=(r.poly[j][0]*W).toFixed(2)+","+(r.poly[j][1]*H).toFixed(2)+" ";svg+='<polygon id="'+r.label.replace(/\s+/g,"_")+'" points="'+pts.trim()+'" fill="'+r.color+'" stroke="#fff" stroke-width="1"/>\n'}svg+="</svg>";dlFile("metamapper.svg",svg,"image/svg+xml")}
-function exportOBJ(){var obj="# TBG "+W+"x"+H+"\n",vO=1;obj+="o Canvas\nv 0 "+H+" 0\nv "+W+" "+H+" 0\nv "+W+" 0 0\nv 0 0 0\nf 1 2 3 4\n\n";vO=5;for(var i=0;i<regs.length;i++){var r=regs[i];if(!r.closed||r.poly.length<3)continue;obj+="o "+r.label.replace(/\s+/g,"_")+"\n";for(var j=0;j<r.poly.length;j++)obj+="v "+(r.poly[j][0]*W).toFixed(2)+" "+((1-r.poly[j][1])*H).toFixed(2)+" 0\n";obj+="f";for(var j=0;j<r.poly.length;j++)obj+=" "+(vO+j);obj+="\n\n";vO+=r.poly.length}dlFile("metamapper.obj",obj,"text/plain")}
+function svgPathD(r){syncH(r);var p=r.poly,n=p.length,f=function(q){return(q[0]*W).toFixed(2)+","+(q[1]*H).toFixed(2)},d="M"+f(p[0]),cl=isClosedPath(r),segs=cl?n:n-1;
+  for(var i=0;i<segs;i++){var j=(i+1)%n,a=r.hnd[i],b=r.hnd[j];d+=(a||b)?" C"+f(a?[a[2],a[3]]:p[i])+" "+f(b?[b[0],b[1]]:p[j])+" "+f(p[j]):" L"+f(p[j])}return d+(cl?" Z":"")}
+function exportSVG(){var svg='<?xml version="1.0"?>\n<svg xmlns="http://www.w3.org/2000/svg" width="'+W+'" height="'+H+'" viewBox="0 0 '+W+' '+H+'">\n<rect id="canvas" x="0" y="0" width="'+W+'" height="'+H+'" fill="none" stroke="#333" stroke-width="2"/>\n';
+  for(var i=0;i<regs.length;i++){var r=regs[i],id=r.label.replace(/\s+/g,"_");
+    if(r.type==="spline"){if(r.poly.length<2)continue;svg+='<path id="'+id+'" d="'+svgPathD(r)+'" fill="none" stroke="'+r.color+'" stroke-width="2"/>\n';continue}
+    if(!r.closed||r.poly.length<3)continue;svg+='<path id="'+id+'" d="'+svgPathD(r)+'" fill="'+r.color+'" stroke="#fff" stroke-width="1"/>\n'}
+  svg+="</svg>";dlFile("metamapper.svg",svg,"image/svg+xml")}
+function exportOBJ(){var obj="# TBG "+W+"x"+H+"\n",vO=1;obj+="o Canvas\nv 0 "+H+" 0\nv "+W+" "+H+" 0\nv "+W+" 0 0\nv 0 0 0\nf 1 2 3 4\n\n";vO=5;
+  for(var i=0;i<regs.length;i++){var r=regs[i];if(!r.closed||r.poly.length<3||r.type==="spline")continue;var gp=geo(r);obj+="o "+r.label.replace(/\s+/g,"_")+"\n";
+    for(var j=0;j<gp.length;j++)obj+="v "+(gp[j][0]*W).toFixed(2)+" "+((1-gp[j][1])*H).toFixed(2)+" 0\n";obj+="f";for(var j=0;j<gp.length;j++)obj+=" "+(vO+j);obj+="\n\n";vO+=gp.length}
+  dlFile("metamapper.obj",obj,"text/plain")}
 function exportBlenderSetup(){var py="import bpy\nW,H="+W+","+H+"\nbpy.context.scene.render.resolution_x=W\nbpy.context.scene.render.resolution_y=H\nbpy.context.scene.render.resolution_percentage=100\ncam=bpy.data.cameras.new('TBG_Cam')\ncam.type='ORTHO'\ncam.ortho_scale=W\nco=bpy.data.objects.new('TBG_Cam',cam)\nbpy.context.collection.objects.link(co)\nco.location=(W/2,H/2,10)\nbpy.context.scene.camera=co\nlt=bpy.data.lights.new('TBG_Sun',type='SUN')\nlt.energy=3\nlo=bpy.data.objects.new('TBG_Sun',lt)\nbpy.context.collection.objects.link(lo)\nlo.location=(W/2,H/2,8)\nlo.rotation_euler=(0.3,0.3,0)\nbpy.context.scene.render.film_transparent=True\nprint('TBG: "+W+"x"+H+" ortho cam ready')";dlFile("metamapper_setup.py",py,"text/x-python")}
 function dlFile(n,c,m){var b=new Blob([c],{type:m}),a=document.createElement("a");a.href=URL.createObjectURL(b);a.download=n;document.body.appendChild(a);a.click();document.body.removeChild(a)}
 

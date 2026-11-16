@@ -25,6 +25,14 @@ Works in Chrome, Edge and other Chromium browsers. It opens with The Bridge Gall
 - **Undo / redo** for all shape and layer changes
 - Labels shown in the centre of each shape while editing
 
+### Shapes and curves
+- **Shape tools:** Rect, Rounded rect, Ellipse, Polygon (3–24 sides) and Star. Drag on the canvas *or on the projector window* to drop one (Shift for square/circle, a single click drops a default size)
+- **Concentric rings:** set Rings (up to 12) and Inner size to drop evenly spaced nested shapes in one go, each its own region, optionally grouped
+- **Outline only** makes the shapes as spline loops for edge and text effects with no fill
+- **Bezier curves:** double-click a point (or press B) to switch it between a sharp corner and a smooth curve, then drag its handles (Alt breaks the pair). Smooth all / Sharpen all per region. Ellipses are true bezier circles, so you can pull individual points and they stay round
+- **Shape editing:** click an outline to add a point on the curve, drag inside a shape to move it, arrows / `[` `]` / Shift+`[` `]` move, scale and rotate the whole shape, plus flip buttons
+- SVG export writes real bezier paths; OBJ export uses the smoothed outline
+
 ### On-site mapping with a projector
 - **📽 Projector** opens a second window for the projector. In Chrome it can move itself onto the second display; double-click it or press F for fullscreen
 - In Edit mode the projector shows each shape as a flat colour with outlines and labels, plus a **crosshair** following your mouse, so you can see exactly where every point lands on the wall
@@ -100,6 +108,11 @@ Every major parameter can be driven by an LFO (Sine, Triangle, Sawtooth, Square,
 2. **Scan** → Source: Loaded mask image → Show scan preview → Mode: Colour
 3. Adjust until the yellow outlines match, then **Add as regions**
 
+### Map concentric circles or squares
+1. **Shapes** → pick Ellipse or Rounded, set Rings and Inner size
+2. Drag across the outermost shape on the projector (Shift for a perfect circle/square)
+3. Drag individual points or handles to match the wall; double-click a point to sharpen or curve it
+
 ### Map a surface on site
 1. Connect the projector as a second display and click **📽 Projector**; make it fullscreen on the projector
 2. Either trace shapes by hand while watching the projector, or use **Scan** with a webcam: Camera on → Calibrate (Auto) → Show scan preview → tune → Add as regions
@@ -107,18 +120,19 @@ Every major parameter can be driven by an LFO (Sine, Triangle, Sawtooth, Square,
 4. Switch to ANIMATE and turn on **MAP** to fine-tune with content running
 
 ### Use an Unlimiter tool as a layer
-1. Set a region's Fill to **Source**, open the Source menu and pick the tool under *Open an Unlimiter tool* — it opens in its own window and the region uses it straight away (or add it first from **Sources → + Unlimiter tool**)
-2. Adjust the tool in its own window; the region updates live
-3. The address box in **Sources** says where the tools live — a folder (default `../Unlimiter/`) or one page
+1. Open **Sources** → enter the tool's address → **+ Tool**
+2. Set a region's Fill to **Source** and pick it
+3. Adjust the tool in its own window; the region updates live
 
 ---
 
 ## Good to know
-- **Tab / window capture shows Chrome's sharing bar.** Chrome marks any shared tab with a "sharing this tab" bar and shrinks that tab to fit it; a page can't turn it off. Press **Hide** on the bar, or use the Unlimiter tool route above, which reads the tool's canvas directly and shows no bar or prompt
 - **Same-site rule for tools.** + Tool only works when the tool and MetaMapper are on the same site (both on racemetamo.github.io works; a downloaded copy of MetaMapper doesn't). For anything else, use **+ Tab / window**
-- **Tool windows can be minimised.** MetaMapper runs an Unlimiter tool's frames itself and draws its canvas directly, so a tool window keeps going when minimised or covered (the status says *keeps running minimised*). MetaMapper's own window, or its projector window, must stay on screen. Tab / window captures still slow down when the shared window is hidden
+- **Keep feeding windows visible.** Browsers slow down hidden windows, so keep tool windows open and on screen
 - **Camera scanning** works best in a dim space with the camera roughly facing the wall. Expect to tune Threshold and Blur on site
 - **Pop-ups** must be allowed for the projector and tool windows
+- Edge effects travel along open splines end to start (they no longer cut back across an invisible closing line); close a spline, or use Outline only shapes, for a continuous loop
+- Animation speed follows real time, so a heavy scene drops frames rather than slowing the motion down
 - Live sources and videos aren't saved in JSON files; re-add them after reloading
 
 ---
