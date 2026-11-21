@@ -82,7 +82,8 @@ Every major parameter can be driven by an LFO (Sine, Triangle, Sawtooth, Square,
 
 ### Performance tools
 - **Tap tempo** sets global speed from your BPM
-- **Randomize** all regions in one click, or auto-randomize every 2 to 32 seconds
+- **Randomize** all regions in one click, or auto-randomize every 2 to 32 seconds. Looks **crossfade** into each other (Cut to 6 s). Randomize keeps to Normal / Add / Screen blends so regions never vanish, skips Image / Video / Source fills, gives grouped regions the same look, and stays inside the safe performance ranges
+- **Safe limits** (on by default) caps the few settings that cost real frame rate: very fine Stripes / Grid / Checker, large or busy Voronoi, very wide edges, many text repeats
 - **Copy / paste style** between regions
 - Render at ½× resolution for smooth editing, 1× for final output; **Unmask** drops the reference image for extra performance
 
@@ -132,6 +133,7 @@ Every major parameter can be driven by an LFO (Sine, Triangle, Sawtooth, Square,
 - **Camera scanning** works best in a dim space with the camera roughly facing the wall. Expect to tune Threshold and Blur on site
 - **Pop-ups** must be allowed for the projector and tool windows
 - Edge effects travel along open splines end to start (they no longer cut back across an invisible closing line); close a spline, or use Outline only shapes, for a continuous loop
+- The cell-based fills (Noise, Static, Plasma, Gradient, Ripple, Voronoi, Pulse, Scan) and Checker / Grid render several times faster than before with identical output, so 1× resolution with many regions holds frame rate
 - Animation speed follows real time, so a heavy scene drops frames rather than slowing the motion down
 - Live sources and videos aren't saved in JSON files; re-add them after reloading
 

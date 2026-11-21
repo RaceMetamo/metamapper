@@ -109,6 +109,13 @@ canvas{position:absolute;top:0;left:0;width:100%;height:100%}
 <option value="16">16s</option>
 <option value="32">32s</option>
 </select>
+<select id="xfSel" onchange="xfDur=+this.value" title="Crossfade time when randomizing" style="background:#222;color:#bbb;border:1px solid #444;font-size:10px;padding:2px">
+<option value="0">Fade: Cut</option>
+<option value="0.5">Fade 0.5s</option>
+<option value="1.5" selected>Fade 1.5s</option>
+<option value="3">Fade 3s</option>
+<option value="6">Fade 6s</option>
+</select>
 <span id="info">Click canvas to place points</span>
 <button onclick="document.getElementById('help').style.display=document.getElementById('help').style.display==='none'?'flex':'none'">?</button>
 <button onclick="document.getElementById('about').style.display=document.getElementById('about').style.display==='none'?'flex':'none'">About</button>
@@ -219,8 +226,10 @@ canvas{position:absolute;top:0;left:0;width:100%;height:100%}
 <h3>Presets &amp; Randomize</h3>
 <p><kbd>Save</kbd> Save current state to browser localStorage.<br>
 <kbd>Load</kbd> Load a previously saved preset.<br>
-<kbd>🎲</kbd> Randomize all region fill/edge types, hues, speeds, and blend modes.<br>
-<kbd>Auto</kbd> dropdown — auto-randomize at set intervals (2s–32s).</p>
+<kbd>🎲</kbd> Randomize all region fill/edge types, hues, speeds, scale, angle and blend. Blend stays Normal, Add or Screen (Multiply and the others can make a region vanish over black), media fills (Image, Video, Source) are skipped, grouped regions get the same look, and values stay inside the safe performance ranges.<br>
+<kbd>Auto</kbd> dropdown — auto-randomize at set intervals (2s–32s).<br>
+<kbd>Fade</kbd> dropdown — crossfade time between randomized looks (Cut to 6s; capped below the Auto interval).<br>
+<b>Safe limits</b> (GLOBAL panel, on by default) clamps the settings that cost the most frame rate: Stripes scale ≥ 0.4, Grid ≥ 0.35, Checker ≥ 0.3, Voronoi scale ≤ 1.6 and ≤ 24 cells, edge width ≤ 10, text repeat ≤ 8. Turn it off to go past them.</p>
 
 <h2>SIDE PANEL — GLOBAL</h2>
 <p><b>Speed</b> — Global animation speed multiplier.<br>
@@ -402,6 +411,17 @@ function lfo(wave,phase){
   return 0;
 }
 
+// Settings that get expensive past a point. With "Safe limits" on, render and Randomize stay inside them.
+var perfSafe=true;
+var SAFE={stripes:{scale:[0.4,3]},grid:{scale:[0.35,3]},checker:{scale:[0.3,3]},voronoi:{scale:[0.3,1.6],vorCells:[3,24]},
+  _edge:{edgeWidth:[0.5,10]},_text:{textRepeat:[1,8]}};
+function clampSafe(o){
+  if(!perfSafe)return o;
+  var t=SAFE[o.fill];if(t)for(var k in t)o[k]=Math.max(t[k][0],Math.min(t[k][1],o[k]));
+  o.edgeWidth=Math.min(SAFE._edge.edgeWidth[1],o.edgeWidth);
+  if(o.textRepeat)o.textRepeat=Math.min(SAFE._text.textRepeat[1],o.textRepeat);
+  return o;
+}
 function applyMods(r,t){
   var out={};for(var k in r)out[k]=r[k];out.mods=r.mods;
   var pt=t+r.phase;
@@ -414,7 +434,7 @@ function applyMods(r,t){
   out.edgeWidth=Math.max(0.5,out.edgeWidth);out.opacity=Math.max(0,Math.min(1,out.opacity));
   out.scale=Math.max(0.1,out.scale);
   out.vorCells=Math.max(3,Math.round(out.vorCells||12));
-  return out;
+  return clampSafe(out);
 }
 
 // Actions
@@ -508,29 +528,56 @@ function copyStyle(){var r=regs[active];if(!r)return;copiedStyle={fill:r.fill,fi
 function pasteStyle(){if(!copiedStyle)return;var r=regs[active];if(!r)return;saveUndo();for(var k in copiedStyle)r[k]=copiedStyle[k];buildP();document.getElementById("info").textContent="Style pasted to "+r.label}
 
 // Randomize
-var autoRandTimer=null;
+// Only blend modes that never make a region vanish over black; no media fills (empty unless loaded);
+// values inside the safe ranges; grouped regions stay identical; changes crossfade over xfDur seconds.
+var autoRandTimer=null,autoRandSec=0,xfDur=1.5,xfMap=new WeakMap();
+var RAND_BLENDS=["source-over","lighter","screen"];
+var RAND_FILLS=["noise","scan","pulse","breath","rain","static","plasma","gradient","grid","ripple","stripes","solid","checker","wave","voronoi"];
+var XF_KEYS=["fill","edge","fillHue","edgeHue","fillSpeed","edgeSpeed","fillInt","edgeInt","edgeWidth","scale","angle","blend","opacity","vorCells","vorSeed","phase","textMode","textSpeed","textSize"];
+function rr(a,b){return a+Math.random()*(b-a)}
+function inSafe(fill,key,lo,hi){var t=SAFE[fill]&&SAFE[fill][key];if(t){lo=Math.max(lo,t[0]);hi=Math.min(hi,t[1])}return rr(lo,hi)}
+function randStyle(){
+  var edges=ET.filter(function(e){return e!=="off"}),f=RAND_FILLS[Math.floor(Math.random()*RAND_FILLS.length)];
+  var o={fill:f,edge:edges[Math.floor(Math.random()*edges.length)],
+    fillHue:Math.floor(Math.random()*360),edgeHue:Math.floor(Math.random()*360),
+    fillSpeed:rr(0.3,2.8),edgeSpeed:rr(0.3,3.3),
+    scale:inSafe(f,"scale",0.3,2.3),angle:Math.floor(Math.random()*360),
+    blend:RAND_BLENDS[Math.floor(Math.random()*RAND_BLENDS.length)]};
+  if(f==="voronoi"){o.vorCells=Math.round(inSafe(f,"vorCells",4,24));o.vorSeed=Math.floor(Math.random()*100)}
+  return o;
+}
 function randomize(){
-  var fills=FT.filter(function(f){return f!=="off"});
-  var edges=ET.filter(function(e){return e!=="off"});
+  var dur=xfDur;if(autoRandSec>0)dur=Math.min(dur,autoRandSec*0.8);
+  var now=performance.now(),byGroup={};
   for(var i=0;i<regs.length;i++){
     var r=regs[i];
-    r.fill=fills[Math.floor(Math.random()*fills.length)];
-    r.edge=edges[Math.floor(Math.random()*edges.length)];
-    r.fillHue=Math.floor(Math.random()*360);
-    r.edgeHue=Math.floor(Math.random()*360);
-    r.fillSpeed=0.3+Math.random()*2.5;
-    r.edgeSpeed=0.3+Math.random()*3;
-    r.scale=0.3+Math.random()*2;
-    r.angle=Math.floor(Math.random()*360);
-    r.blend=BLENDS[Math.floor(Math.random()*BLENDS.length)];
+    if(dur>0&&mode==="animate"){var from={};for(var k=0;k<XF_KEYS.length;k++)from[XF_KEYS[k]]=r[XF_KEYS[k]];xfMap.set(r,{from:from,t0:now,dur:dur*1000})}
+    var st=r.group?(byGroup[r.group]||(byGroup[r.group]=randStyle())):randStyle();
+    for(var k2 in st)r[k2]=st[k2];
   }
   buildP();
 }
 function setAutoRand(sec){
   if(autoRandTimer){clearInterval(autoRandTimer);autoRandTimer=null}
-  var s=parseFloat(sec);
+  var s=parseFloat(sec);autoRandSec=s>0?s:0;
   if(s>0)autoRandTimer=setInterval(randomize,s*1000);
 }
+// One region's fill, edge and text, at alpha multiplier am (used twice while crossfading)
+function drawReg(r,am,isSpline){
+  if(am<=0.002)return;
+  ctx.globalCompositeOperation=r.blend||"source-over";
+  ctx.globalAlpha=r.opacity*am;
+  if(!isSpline&&r.fill!=="off"&&FD[r.fill]){ctx.save();pp(r.poly);ctx.clip();FD[r.fill](r,time+r.phase);ctx.restore()}
+  edgeClosed=isSpline?isClosedPath(r):true;
+  if(r.edge!=="off"&&ED[r.edge]){ctx.save();ED[r.edge](r,time+r.phase);ctx.restore()}
+  if(r.textMode!=="off"&&r.text&&TD[r.textMode]){
+    if(r.textMode==="edge"||isSpline){ctx.save();TD[r.textMode](r,time+r.phase);ctx.restore()}
+    else{ctx.save();pp(r.poly);ctx.clip();TD[r.textMode](r,time+r.phase);ctx.restore()}
+  }
+  ctx.globalCompositeOperation="source-over";ctx.globalAlpha=1;edgeClosed=true;
+}
+// Additive layers fade linearly; others overlap at full strength mid-fade so nothing dips to black
+function xfA(blend,k){return blend==="lighter"?k:Math.min(1,k*2)}
 
 // ============ CANVAS INTERACTION (operator screen + projector window) ============
 c.style.cursor="crosshair";
@@ -955,25 +1002,43 @@ function polyCtr(p){var cx=0,cy=0;for(var i=0;i<p.length;i++){cx+=p[i][0];cy+=p[
 function polyBB(p){var x0=1,y0=1,x1=0,y1=0;for(var i=0;i<p.length;i++){if(p[i][0]<x0)x0=p[i][0];if(p[i][0]>x1)x1=p[i][0];if(p[i][1]<y0)y0=p[i][1];if(p[i][1]>y1)y1=p[i][1]}return{x:Math.floor(x0*W),y:Math.floor(y0*H),w:Math.ceil((x1-x0)*W),h:Math.ceil((y1-y0)*H),x1:Math.ceil(x1*W),y1:Math.ceil(y1*H)}}
 
 // ============ FILL RENDERERS (bounding-box optimized) ============
-function fNoise(r,t){var s=t*r.fillSpeed*0.3,sc=r.scale,st=10,bb=polyBB(r.poly);for(var y=bb.y;y<bb.y1;y+=st)for(var x=bb.x;x<bb.x1;x+=st){var nv=n2(x*0.03/sc+s,y*0.03/sc+s*0.7),v2=n2(x*0.008/sc-s*0.2,y*0.008/sc+s*0.4);ctx.fillStyle=hs(r.fillHue+v2*30,0.8,(nv*0.7+v2*0.3)*r.fillInt*0.5*gBright);ctx.fillRect(x,y,st,st)}}
+// Cell fills compute one colour per cell into a tiny buffer, then draw it scaled up with no
+// smoothing: the same blocky look as one fillRect per cell, at a fraction of the cost.
+var cellCv=document.createElement("canvas"),cellCx=cellCv.getContext("2d"),cellBuf=null,_r=0,_g=0,_b=0;
+function hsl3(h,s,l){h=((h%360)+360)%360;s=Math.round(s*100)/100;l=Math.round(Math.max(0,Math.min(1,l))*100)/100;
+  var a=s*Math.min(l,1-l),k;
+  k=(h/30)%12;_r=Math.round((l-a*Math.max(-1,Math.min(k-3,9-k,1)))*255);
+  k=(8+h/30)%12;_g=Math.round((l-a*Math.max(-1,Math.min(k-3,9-k,1)))*255);
+  k=(4+h/30)%12;_b=Math.round((l-a*Math.max(-1,Math.min(k-3,9-k,1)))*255)}
+function cellFill(bb,stx,sty,fn){
+  var cw=Math.ceil(bb.w/stx-1e-9),ch=Math.ceil(bb.h/sty-1e-9);if(cw<1||ch<1)return;
+  if(cellCv.width<cw||cellCv.height<ch){cellCv.width=Math.max(cw,cellCv.width);cellCv.height=Math.max(ch,cellCv.height);cellBuf=null}
+  if(!cellBuf||cellBuf.width!==cw||cellBuf.height!==ch)cellBuf=cellCx.createImageData(cw,ch);
+  var d=cellBuf.data,i=0;
+  for(var j=0;j<ch;j++){var y=bb.y+j*sty;for(var k=0;k<cw;k++){fn(bb.x+k*stx,y);d[i]=_r;d[i+1]=_g;d[i+2]=_b;d[i+3]=255;i+=4}}
+  cellCx.putImageData(cellBuf,0,0);
+  var sm=ctx.imageSmoothingEnabled;ctx.imageSmoothingEnabled=false;
+  ctx.drawImage(cellCv,0,0,cw,ch,bb.x,bb.y,cw*stx,ch*sty);ctx.imageSmoothingEnabled=sm;
+}
+function fNoise(r,t){var s=t*r.fillSpeed*0.3,sc=r.scale,h=r.fillHue,fi=r.fillInt*0.5*gBright;cellFill(polyBB(r.poly),10,10,function(x,y){var nv=n2(x*0.03/sc+s,y*0.03/sc+s*0.7),v2=n2(x*0.008/sc-s*0.2,y*0.008/sc+s*0.4);hsl3(h+v2*30,0.8,(nv*0.7+v2*0.3)*fi)})}
 
-function fScan(r,t){var s=t*r.fillSpeed,a=r.angle*Math.PI/180,bb=polyBB(r.poly);for(var y=bb.y;y<bb.y1;y+=3){var d=Math.cos(a)*y+Math.sin(a)*W*0.5;var v=(Math.sin(d*0.08/r.scale+s*2)*0.5+0.5)*(Math.sin(d*0.4/r.scale+s*5)>0.6?1:0.4)*r.fillInt;ctx.fillStyle=hs(r.fillHue,0.7,v*0.4*gBright);ctx.fillRect(bb.x,y,bb.w,3)}}
+function fScan(r,t){var s=t*r.fillSpeed,a=r.angle*Math.PI/180,bb=polyBB(r.poly),h=r.fillHue,ca=Math.cos(a),sa=Math.sin(a)*W*0.5;cellFill(bb,bb.w,3,function(x,y){var d=ca*y+sa;var v=(Math.sin(d*0.08/r.scale+s*2)*0.5+0.5)*(Math.sin(d*0.4/r.scale+s*5)>0.6?1:0.4)*r.fillInt;hsl3(h,0.7,v*0.4*gBright)})}
 
-function fPulse(r,t){var s=t*r.fillSpeed,a=r.angle*Math.PI/180,bb=polyBB(r.poly);for(var x=bb.x;x<bb.x1;x+=5){var d=Math.cos(a)*x+Math.sin(a)*H*0.5;var v=(Math.sin(d*0.015/r.scale+s)*0.5+0.5)*(Math.sin(s*0.5)*0.3+0.7)*r.fillInt;ctx.fillStyle=hs(r.fillHue+Math.sin(s*0.3)*20,0.9,v*0.5*gBright);ctx.fillRect(x,bb.y,5,bb.h)}}
+function fPulse(r,t){var s=t*r.fillSpeed,a=r.angle*Math.PI/180,bb=polyBB(r.poly),ca=Math.cos(a),sa=Math.sin(a)*H*0.5,hh=r.fillHue+Math.sin(s*0.3)*20,m=(Math.sin(s*0.5)*0.3+0.7)*r.fillInt;cellFill(bb,5,bb.h,function(x,y){var d=ca*x+sa;var v=(Math.sin(d*0.015/r.scale+s)*0.5+0.5)*m;hsl3(hh,0.9,v*0.5*gBright)})}
 
 function fBreath(r,t){var s=t*r.fillSpeed,v=(Math.sin(s*0.5)*0.4+0.5)*r.fillInt,bb=polyBB(r.poly);ctx.fillStyle=hs(r.fillHue+Math.sin(s*0.2)*15,0.6,v*0.4*gBright);ctx.fillRect(bb.x,bb.y,bb.w,bb.h)}
 
 function fRain(r,t){var s=t*r.fillSpeed,bb=polyBB(r.poly);for(var x=bb.x;x<bb.x1;x+=6){var co=(x*7+13)%23;for(var y=bb.y;y<bb.y1;y+=5){var dr=((y+s*200+co*47)%120)/120;if(dr<0.12){ctx.fillStyle=hs(r.fillHue,0.8,(1-dr/0.12)*r.fillInt*0.6*gBright);ctx.fillRect(x,y,5,5)}}}}
 
-function fStatic(r,t){var st=8,bb=polyBB(r.poly);for(var y=bb.y;y<bb.y1;y+=st)for(var x=bb.x;x<bb.x1;x+=st){ctx.fillStyle=hs(r.fillHue,0.3,Math.random()*r.fillInt*0.35*gBright);ctx.fillRect(x,y,st,st)}}
+function fStatic(r,t){var h=r.fillHue,fi=r.fillInt*0.35*gBright;cellFill(polyBB(r.poly),8,8,function(){hsl3(h,0.3,Math.random()*fi)})}
 
-function fPlasma(r,t){var s=t*r.fillSpeed*0.4,sc=r.scale,st=8,bb=polyBB(r.poly);for(var y=bb.y;y<bb.y1;y+=st)for(var x=bb.x;x<bb.x1;x+=st){var v=Math.sin(x*0.02/sc+s)+Math.sin(y*0.02/sc+s*0.7)+Math.sin((x+y)*0.015/sc+s*1.3)+Math.sin(Math.sqrt((x-bb.x)*(x-bb.x)+(y-bb.y)*(y-bb.y))*0.01/sc+s*0.5);v=(v+4)/8;ctx.fillStyle=hs(r.fillHue+v*120,0.8,v*r.fillInt*0.6*gBright);ctx.fillRect(x,y,st,st)}}
+function fPlasma(r,t){var s=t*r.fillSpeed*0.4,sc=r.scale,bb=polyBB(r.poly),h=r.fillHue,fi=r.fillInt*0.6*gBright;cellFill(bb,8,8,function(x,y){var v=Math.sin(x*0.02/sc+s)+Math.sin(y*0.02/sc+s*0.7)+Math.sin((x+y)*0.015/sc+s*1.3)+Math.sin(Math.sqrt((x-bb.x)*(x-bb.x)+(y-bb.y)*(y-bb.y))*0.01/sc+s*0.5);v=(v+4)/8;hsl3(h+v*120,0.8,v*fi)})}
 
-function fGradient(r,t){var s=t*r.fillSpeed,a=(r.angle+s*30)*Math.PI/180,bb=polyBB(r.poly);var cx=bb.x+bb.w/2,cy=bb.y+bb.h/2,dx=Math.cos(a),dy=Math.sin(a),maxD=Math.sqrt(bb.w*bb.w+bb.h*bb.h)/2;for(var y=bb.y;y<bb.y1;y+=5)for(var x=bb.x;x<bb.x1;x+=5){var d=((x-cx)*dx+(y-cy)*dy)/maxD*0.5+0.5;d=Math.max(0,Math.min(1,d+Math.sin(s*0.3)*0.1));ctx.fillStyle=hs(r.fillHue+d*60,0.7,d*r.fillInt*0.6*gBright);ctx.fillRect(x,y,5,5)}}
+function fGradient(r,t){var s=t*r.fillSpeed,a=(r.angle+s*30)*Math.PI/180,bb=polyBB(r.poly);var cx=bb.x+bb.w/2,cy=bb.y+bb.h/2,dx=Math.cos(a),dy=Math.sin(a),maxD=Math.sqrt(bb.w*bb.w+bb.h*bb.h)/2,wob=Math.sin(s*0.3)*0.1,h=r.fillHue,fi=r.fillInt*0.6*gBright;cellFill(bb,5,5,function(x,y){var d=((x-cx)*dx+(y-cy)*dy)/maxD*0.5+0.5;d=Math.max(0,Math.min(1,d+wob));hsl3(h+d*60,0.7,d*fi)})}
 
-function fGrid(r,t){var s=t*r.fillSpeed,sc=Math.max(8,40*r.scale),lw=Math.max(1,2*r.scale),a=r.angle*Math.PI/180,bb=polyBB(r.poly);var diag=Math.sqrt(bb.w*bb.w+bb.h*bb.h);ctx.strokeStyle=hs(r.fillHue,0.8,r.fillInt*0.5*gBright);ctx.lineWidth=lw;ctx.save();ctx.translate(bb.x+bb.w/2,bb.y+bb.h/2);ctx.rotate(a);for(var i=-diag;i<diag;i+=sc){var off=Math.sin(s+i*0.01)*sc*0.1;ctx.beginPath();ctx.moveTo(-diag,i+off);ctx.lineTo(diag,i+off);ctx.stroke();ctx.beginPath();ctx.moveTo(i+off,-diag);ctx.lineTo(i+off,diag);ctx.stroke()}ctx.restore()}
+function fGrid(r,t){var s=t*r.fillSpeed,sc=Math.max(8,40*r.scale),lw=Math.max(1,2*r.scale),a=r.angle*Math.PI/180,bb=polyBB(r.poly);var diag=Math.sqrt(bb.w*bb.w+bb.h*bb.h);ctx.strokeStyle=hs(r.fillHue,0.8,r.fillInt*0.5*gBright);ctx.lineWidth=lw;ctx.save();ctx.translate(bb.x+bb.w/2,bb.y+bb.h/2);ctx.rotate(a);var i,off;ctx.beginPath();for(i=-diag;i<diag;i+=sc){off=Math.sin(s+i*0.01)*sc*0.1;ctx.moveTo(-diag,i+off);ctx.lineTo(diag,i+off)}ctx.stroke();ctx.beginPath();for(i=-diag;i<diag;i+=sc){off=Math.sin(s+i*0.01)*sc*0.1;ctx.moveTo(i+off,-diag);ctx.lineTo(i+off,diag)}ctx.stroke();ctx.restore()}
 
-function fRipple(r,t){var s=t*r.fillSpeed,ctr=polyCtr(r.poly),sc=r.scale,st=6,bb=polyBB(r.poly);var maxR=Math.max(bb.w,bb.h)*0.5;for(var y=bb.y;y<bb.y1;y+=st)for(var x=bb.x;x<bb.x1;x+=st){var dx=x-ctr.x,dy=y-ctr.y,dist=Math.sqrt(dx*dx+dy*dy);var v=Math.sin(dist*0.05/sc-s*3)*0.5+0.5;v*=Math.max(0,1-dist/maxR);ctx.fillStyle=hs(r.fillHue+v*40,0.8,v*r.fillInt*0.6*gBright);ctx.fillRect(x,y,st,st)}}
+function fRipple(r,t){var s=t*r.fillSpeed,ctr=polyCtr(r.poly),sc=r.scale,bb=polyBB(r.poly),h=r.fillHue,fi=r.fillInt*0.6*gBright;var maxR=Math.max(bb.w,bb.h)*0.5;cellFill(bb,6,6,function(x,y){var dx=x-ctr.x,dy=y-ctr.y,dist=Math.sqrt(dx*dx+dy*dy);var v=Math.sin(dist*0.05/sc-s*3)*0.5+0.5;v*=Math.max(0,1-dist/maxR);hsl3(h+v*40,0.8,v*fi)})}
 
 function fStripes(r,t){var s=t*r.fillSpeed,a=r.angle*Math.PI/180,w=Math.max(5,30*r.scale),bb=polyBB(r.poly);var diag=Math.sqrt(bb.w*bb.w+bb.h*bb.h);ctx.save();ctx.translate(bb.x+bb.w/2,bb.y+bb.h/2);ctx.rotate(a);for(var i=-diag;i<diag;i+=w){var phase=Math.sin(i*0.1+s*2)*0.5+0.5;ctx.fillStyle=hs(r.fillHue+phase*30,0.8,phase*r.fillInt*0.5*gBright);ctx.fillRect(-diag,i+s*20%w,diag*2,w*0.6)}ctx.restore()}
 
@@ -1088,32 +1153,23 @@ function fVoronoi(r,t){
     });
   }
   // Render
-  for(var y=bb.y;y<bb.y1;y+=st){
-    for(var x=bb.x;x<bb.x1;x+=st){
-      var d1=1e9,d2=1e9,nearest=0;
-      for(var ci=0;ci<numCells;ci++){
-        var dx=x-cells[ci].x,dy=y-cells[ci].y;
-        var dist=dx*dx+dy*dy;
-        if(dist<d1){d2=d1;d1=dist;nearest=ci}
-        else if(dist<d2){d2=dist}
-      }
-      d1=Math.sqrt(d1);d2=Math.sqrt(d2);
-      var edge=1-Math.min(1,Math.max(0,(d2-d1)/(d2+0.001)*4));
-      var cellLum=(0.2+edge*0.5)*r.fillInt*gBright;
-      var edgeLum=edge*0.8*r.fillInt*gBright;
-      if(edge>0.6){
-        ctx.fillStyle=hs(r.fillHue+10,0.5,edgeLum);
-      }else{
-        ctx.fillStyle=hs(cells[nearest].hue,0.6,cellLum*0.4);
-      }
-      ctx.fillRect(x,y,st,st);
-    }
-  }
+  var fi=r.fillInt*gBright;
+  cellFill(bb,st,st,function(x,y){
+    var d1=1e9,d2=1e9,nearest=0;
+    for(var ci=0;ci<numCells;ci++){var dx=x-cells[ci].x,dy=y-cells[ci].y,dist=dx*dx+dy*dy;if(dist<d1){d2=d1;d1=dist;nearest=ci}else if(dist<d2)d2=dist}
+    d1=Math.sqrt(d1);d2=Math.sqrt(d2);
+    var edge=1-Math.min(1,Math.max(0,(d2-d1)/(d2+0.001)*4));
+    if(edge>0.6)hsl3(r.fillHue+10,0.5,edge*0.8*fi);else hsl3(cells[nearest].hue,0.6,(0.2+edge*0.5)*fi*0.4);
+  });
 }
 
 function fSolid(r,t){var s=t*r.fillSpeed,bb=polyBB(r.poly);var pulse=Math.sin(s*0.5)*0.05;ctx.fillStyle=hs(r.fillHue,0.7,(r.fillInt*0.5+pulse)*gBright);ctx.fillRect(bb.x,bb.y,bb.w,bb.h)}
 
-function fChecker(r,t){var s=t*r.fillSpeed,sc=Math.max(8,30*r.scale),a=r.angle*Math.PI/180,bb=polyBB(r.poly);var diag=Math.sqrt(bb.w*bb.w+bb.h*bb.h);ctx.save();ctx.translate(bb.x+bb.w/2,bb.y+bb.h/2);ctx.rotate(a);var off=s*20;for(var y=-diag;y<diag;y+=sc)for(var x=-diag;x<diag;x+=sc){var cx=Math.floor((x+off)/sc),cy=Math.floor((y+off)/sc);if((cx+cy)%2===0){ctx.fillStyle=hs(r.fillHue,0.8,r.fillInt*0.5*gBright);ctx.fillRect(x,y,sc,sc)}}ctx.restore()}
+var chkCv=document.createElement("canvas");chkCv.width=chkCv.height=256;var chkCx=chkCv.getContext("2d"),chkCol="";
+function fChecker(r,t){var sc=Math.max(8,30*r.scale),a=r.angle*Math.PI/180,bb=polyBB(r.poly);var diag=Math.sqrt(bb.w*bb.w+bb.h*bb.h);var col=hs(r.fillHue,0.8,r.fillInt*0.5*gBright);
+  if(col!==chkCol){chkCx.clearRect(0,0,256,256);chkCx.fillStyle=col;chkCx.fillRect(0,0,128,128);chkCx.fillRect(128,128,128,128);chkCol=col}
+  var p=ctx.createPattern(chkCv,"repeat");p.setTransform(new DOMMatrix().translate(-diag,-diag).scale(sc/128));
+  ctx.save();ctx.translate(bb.x+bb.w/2,bb.y+bb.h/2);ctx.rotate(a);ctx.fillStyle=p;ctx.fillRect(-diag,-diag,2*diag,2*diag);ctx.restore()}
 
 function fWave(r,t){var s=t*r.fillSpeed,sc=r.scale,bb=polyBB(r.poly);for(var y=bb.y;y<bb.y1;y+=3){var wave=Math.sin(y*0.05/sc+s*2)*bb.w*0.3*sc;var lum=(Math.sin(y*0.02/sc+s)*0.3+0.5)*r.fillInt*gBright;ctx.strokeStyle=hs(r.fillHue+y*0.1,0.8,lum);ctx.lineWidth=2;ctx.beginPath();ctx.moveTo(bb.x+bb.w/2+wave-bb.w*0.4,y);ctx.lineTo(bb.x+bb.w/2+wave+bb.w*0.4,y);ctx.stroke()}}
 
@@ -1272,16 +1328,14 @@ function render(){
       else{if(!r.closed||r.poly.length<3)continue}
       if(r.mute)continue;
       if(hasSolo&&!r.solo)continue;
-      ctx.globalCompositeOperation=r.blend||"source-over";
-      ctx.globalAlpha=r.opacity;
-      if(!isSpline&&r.fill!=="off"&&FD[r.fill]){ctx.save();pp(r.poly);ctx.clip();FD[r.fill](r,time+r.phase);ctx.restore()}
-      edgeClosed=isSpline?isClosedPath(r):true;
-      if(r.edge!=="off"&&ED[r.edge]){ctx.save();ED[r.edge](r,time+r.phase);ctx.restore()}
-      if(r.textMode!=="off"&&r.text&&TD[r.textMode]){
-        if(r.textMode==="edge"||isSpline){ctx.save();TD[r.textMode](r,time+r.phase);ctx.restore()}
-        else{ctx.save();pp(r.poly);ctx.clip();TD[r.textMode](r,time+r.phase);ctx.restore()}
-      }
-      ctx.globalCompositeOperation="source-over";ctx.globalAlpha=1;edgeClosed=true;
+      var xf=xfMap.get(regs[ri]),xk=1;
+      if(xf){xk=(performance.now()-xf.t0)/xf.dur;if(xk>=1){xfMap.delete(regs[ri]);xf=null}}
+      if(xf){
+        xk=Math.max(0,xk);xk=xk*xk*(3-2*xk);
+        var src=regs[ri],o2={};for(var kk in src)o2[kk]=src[kk];for(var kk2 in xf.from)o2[kk2]=xf.from[kk2];
+        var old=applyMods(o2,time);old.poly=r.poly;
+        drawReg(old,xfA(old.blend,1-xk),isSpline);drawReg(r,xfA(r.blend,xk),isSpline);
+      }else drawReg(r,1,isSpline);
     }
     // Mirror
     if(mirrorH||mirrorV){ctx.save();ctx.translate(mirrorH?W:0,mirrorV?H:0);ctx.scale(mirrorH?-1:1,mirrorV?-1:1);ctx.globalAlpha=0.5;ctx.globalCompositeOperation="lighter";ctx.drawImage(pc,0,0);ctx.restore()}
@@ -1723,6 +1777,7 @@ function buildP(){
   h+='<div class="rw"><label>Bright</label><input type=range min=0.1 max=2 step=0.05 value='+gBright+' oninput="gBright=+this.value"></div>';
   h+='<div class="rw"><label>Mask</label><input type=range min=0 max=1 step=0.05 value='+maskA+' oninput="maskA=+this.value"></div>';
   h+='<div class="rw"><label>Blackout</label><input type=range min=0 max=1 step=0.01 value='+blackout+' oninput="blackout=+this.value"></div>';
+  h+='<div class="rw"><label title="Keep heavy settings (very fine stripes/checker/grid, large Voronoi, very wide edges, many text repeats) inside limits that hold frame rate">Safe limits</label><input type=checkbox '+(perfSafe?'checked':'')+' onchange="perfSafe=this.checked"><span style="font-size:8px;color:#777;margin-left:4px">hold frame rate</span></div>';
   h+='<div class="sh" style="margin-top:4px"><span>IMAGE</span></div>';
   h+='<div class="rw"><label>Hue Shift</label><input type=range min=-180 max=180 step=1 value='+gHueShift+' oninput="gHueShift=+this.value"></div>';
   h+='<div class="rw"><label>Saturate</label><input type=range min=0 max=3 step=0.05 value='+gSaturate+' oninput="gSaturate=+this.value"></div>';
