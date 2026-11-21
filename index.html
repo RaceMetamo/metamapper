@@ -1680,6 +1680,21 @@ function pollToolSources(){
     if(!doc||doc.readyState==="loading")return;
     var best=null,ba=0,cvs=doc.querySelectorAll("canvas");
     for(var i=0;i<cvs.length;i++){var cv=cvs[i],a=cv.width*cv.height;if(cv.offsetWidth>0&&a>ba){ba=a;best=cv}}
+    // Unlimiter tools (unlimiter-ui.js 1.1+): read their frames directly and lend them our clock,
+    // so they keep drawing while their window is minimized or hidden
+    var U=null;try{U=s.win.UnlimiterUI}catch(e){}
+    if(U&&U.active&&typeof U.feed==="function"){
+      if(!s.direct){
+        if(s.stream)try{s.stream.getTracks().forEach(function(t){t.stop()})}catch(e){}
+        if(s.video&&s.video.parentNode)s.video.parentNode.removeChild(s.video);
+        s.stream=null;s.video=null;s.direct=true;
+      }
+      try{U.setHost(mmFrameHost)}catch(e){}
+      s.feed=U.feed();var st2="live "+s.feed.width+"×"+s.feed.height+" · direct";
+      if(s.status!==st2){s.status=st2;updSrcStatus(s)}
+      return;
+    }
+    s.direct=false;
     if(!best){if(s.status!=="no canvas yet"){s.status="no canvas yet";updSrcStatus(s)}return}
     if(best!==s.canvas||!s.stream||s.ended){
       try{
@@ -1701,7 +1716,11 @@ function removeSource(id){
   buildP();
 }
 function srcById(id){for(var i=0;i<sources.length;i++)if(sources[i].id===id)return sources[i];return null}
-function fSource(r,t){var s=srcById(r.srcId);if(!s||!s.video)return;var v=s.video;if(v.readyState<2||!v.videoWidth)return;drawMediaFill(r,t,v,v.videoWidth,v.videoHeight)}
+// The window whose animation frames are running right now (projector window when open)
+function mmFrameHost(){return outOpen()?outWin:window}
+function fSource(r,t){var s=srcById(r.srcId);if(!s)return;
+  if(s.direct){var cv=null;try{if(s.win&&!s.win.closed)cv=s.win.UnlimiterUI.feed()}catch(e){}if(cv&&cv.width>16)drawMediaFill(r,t,cv,cv.width,cv.height);return}
+  if(!s.video)return;var v=s.video;if(v.readyState<2||!v.videoWidth)return;drawMediaFill(r,t,v,v.videoWidth,v.videoHeight)}
 
 // ============ PANEL SECTIONS: projector, scan, sources ============
 var SS='onclick="event.stopPropagation()" onmousedown="event.stopPropagation()"';

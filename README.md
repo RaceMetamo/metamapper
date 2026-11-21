@@ -129,7 +129,7 @@ Every major parameter can be driven by an LFO (Sine, Triangle, Sawtooth, Square,
 
 ## Good to know
 - **Same-site rule for tools.** + Tool only works when the tool and MetaMapper are on the same site (both on racemetamo.github.io works; a downloaded copy of MetaMapper doesn't). For anything else, use **+ Tab / window**
-- **Keep feeding windows visible.** Browsers slow down hidden windows, so keep tool windows open and on screen
+- **Minimizing tool windows.** Unlimiter tools added with + Tool read directly and borrow MetaMapper's frame clock (status shows `· direct`), so you can minimize them and they keep animating in the region. Tab / window captures from other software still need their window left open and on screen
 - **Camera scanning** works best in a dim space with the camera roughly facing the wall. Expect to tune Threshold and Blur on site
 - **Pop-ups** must be allowed for the projector and tool windows
 - Edge effects travel along open splines end to start (they no longer cut back across an invisible closing line); close a spline, or use Outline only shapes, for a continuous loop
